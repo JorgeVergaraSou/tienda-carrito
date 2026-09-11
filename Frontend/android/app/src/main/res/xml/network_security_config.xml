@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 9+ (API 28+) bloquea tráfico HTTP plano por default (cleartext).
+  El backend de este proyecto corre en HTTP durante desarrollo (ver Backend/CLAUDE.md),
+  y en el emulador se alcanza como http://10.0.2.2:3006 (ver Frontend/.env.mobile).
+  Esta excepción habilita cleartext SOLO para esa dirección de desarrollo del emulador,
+  no para cualquier dominio — el resto del tráfico sigue exigiendo HTTPS.
+  Sacar/reemplazar este archivo cuando el backend pase a un servidor real con HTTPS
+  (ver la nota "SOLO para desarrollo/prueba en emulador" del pedido original).
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>

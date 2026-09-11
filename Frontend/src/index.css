@@ -1,0 +1,94 @@
+@import "tailwindcss";
+
+/* Base del "App Shell" (Login, Perfil, panel Admin/User, Contacto,
+ * ServiceUnavailable, 404, Home — ver Frontend/CLAUDE.md, sección
+ * "Sistema de diseño — App Shell"): Inter (ya se cargaba para
+ * Catalog2.tsx, se reutiliza acá en vez de sumar una fuente nueva) +
+ * fondo slate-50 como default de toda la app. Los 3 catálogos siguen
+ * intactos porque cada uno pone su propia fuente/fondo en el div raíz
+ * (font-catalog/font-catalog2/font-catalog3 + bg-canvas/bg-neutral-50/
+ * bg-white), que gana por especificidad sobre este default de `body`. */
+body {
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  background-color: #f8fafc;
+}
+
+/* Tokens del catálogo público (Catalog.tsx) — Tailwind v4 genera las
+ * utilidades solo (bg-canvas, text-brand, font-catalog, etc.) a partir de
+ * estas variables. Quedan definidas acá porque el theme de Tailwind v4 es
+ * global por naturaleza, pero solo Catalog.tsx las usa — no cambia nada
+ * en el resto de las páginas, que siguen con el font-sans/paleta de
+ * siempre. Ver Frontend/CLAUDE.md, sección "Rediseño visual del
+ * catálogo". */
+@theme {
+  --font-catalog: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+
+  --color-ink: #16233d;
+  --color-canvas: #f5f6fa;
+  --color-line: #e2e5ec;
+  --color-brand: #2454e0;
+  --color-brand-dark: #1b3fb0;
+
+  /* segundo diseño de catálogo (Catalog2.tsx, inspirado en pcfactory.cl) —
+   * usa la paleta neutral/red default de Tailwind directo (no necesita
+   * tokens de color propios), solo tipografía distinta a font-catalog. */
+  --font-catalog2: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  /* tercer diseño de catálogo (Catalog3.tsx, inspirado en paris.cl) —
+   * mismo criterio que Catalog2: paleta pink/fuchsia default de Tailwind
+   * directo, solo tipografía propia. */
+  --font-catalog3: "Poppins", ui-sans-serif, system-ui, sans-serif;
+
+  /* cuarto diseño de catálogo (Catalog4.tsx) — "vidriera boutique": serif
+   * con carácter SOLO para títulos/nombres de producto (--font-catalog4-
+   * display), el cuerpo usa el sans del sistema (no se suma una segunda
+   * fuente nueva). Paleta propia (casi blanco + tinta + verde esmeralda,
+   * ninguno de los otros 3 catálogos usa verde) — sí necesita tokens de
+   * color, a diferencia de Catalog2/Catalog3 que reusan Tailwind directo. */
+  --font-catalog4-display: "Fraunces", ui-serif, Georgia, serif;
+  --color-c4-bg: #fcfcfb;
+  --color-c4-ink: #1a1a2e;
+  --color-c4-line: #e7e5e2;
+  --color-c4-accent: #065f46;
+
+  /* quinto diseño de catálogo (Catalog5.tsx) — "vidriera de noche": fondo
+   * oscuro con personalidad (pedido explícito del usuario: "no quiero el
+   * blanco plano de IA"), acento dorado/bronce. Es el único de los 5 con
+   * fondo general oscuro — Catalog2.tsx solo tiene la navbar oscura, el
+   * resto de la página ahí es clara. */
+  --font-catalog5: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --color-c5-bg: #15171b;
+  --color-c5-surface: #1c1e24;
+  --color-c5-ink: #f2f0ea;
+  --color-c5-accent: #d9a94e;
+
+  /* sexto diseño de catálogo (Catalog6.tsx) — landing densa multi-sección
+   * estilo "tienda por departamentos" (pedido explícito del usuario, sobre
+   * un análisis de paris.cl), con datos reales — ver Frontend/CLAUDE.md.
+   * Azul marino propio (distinto del --color-brand de Catalog.tsx, que es
+   * un azul más brillante) + blanco dominante, tipografía Manrope. */
+  --font-catalog6: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --color-c6-primary: #14204b;
+  --color-c6-primary-dark: #0c1631;
+  --color-c6-bg: #ffffff;
+  --color-c6-surface: #f1f3f7;
+  --color-c6-ink: #1b2233;
+  --color-c6-line: #e4e7ee;
+
+  /* pills de categoría en marquesina (Catalog.tsx) — la cinta tiene el
+   * contenido duplicado x2 (ver el comentario ahí) y recorre la mitad de
+   * su propio ancho, así el loop no se nota. */
+  --animate-catalog-marquee: catalog-marquee 28s linear infinite;
+}
+
+/* se mueve de izquierda a derecha (pedido explícito del usuario): el
+ * frame inicial ya arranca corrido -50%, así que a medida que "from" pasa
+ * a "to" el contenido avanza hacia la derecha, no al revés. */
+@keyframes catalog-marquee {
+  from {
+    transform: translateX(-50%);
+  }
+  to {
+    transform: translateX(0%);
+  }
+}

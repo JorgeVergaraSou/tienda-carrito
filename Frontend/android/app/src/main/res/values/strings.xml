@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Tienda Básica</string>
+    <string name="title_activity_main">Tienda Básica</string>
+    <string name="package_name">com.tiendabasica.tienda</string>
+    <string name="custom_url_scheme">com.tiendabasica.tienda</string>
+</resources>
