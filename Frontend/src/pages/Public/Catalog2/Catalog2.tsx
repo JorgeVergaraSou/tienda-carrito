@@ -34,7 +34,7 @@ function categoriaItemClass(active: boolean): string {
  * distinta: inspirada en cómo pcfactory.cl arma su catálogo (navbar
  * oscura, acento rojo, filtro de categorías en sidebar en vez de pills en
  * marquesina, grilla más densa/técnica). Registrado en
- * src/catalogs/catalogs.config.ts, montado en '/catalog2' (ver App.tsx).
+ * src/catalogs/catalogs.config.tsx, montado en '/catalog2' (ver App.tsx).
  *
  * A propósito NO tiene nada que el modelo de datos de este proyecto no
  * respalde (specs técnicas, comparador, cuotas) — mismo criterio que ya
@@ -191,7 +191,7 @@ function Catalog2() {
           </Link>
 
           <span className="order-2 shrink-0 text-lg font-extrabold text-white tracking-tight">
-            Tienda Básica
+            Tienda en Línea con carrito de compra
           </span>
 
           <div className="order-3 sm:order-4 ml-auto sm:ml-0 flex shrink-0 items-center gap-4">

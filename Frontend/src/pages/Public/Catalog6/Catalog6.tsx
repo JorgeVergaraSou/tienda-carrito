@@ -235,7 +235,7 @@ function Catalog6() {
           </button>
 
           <span className="shrink-0 text-white font-extrabold tracking-tight text-lg">
-            Tienda Básica
+            Tienda en Línea con carrito de compra
           </span>
 
           <form onSubmit={handleSearchSubmit} className="flex-1 min-w-0 flex gap-2">

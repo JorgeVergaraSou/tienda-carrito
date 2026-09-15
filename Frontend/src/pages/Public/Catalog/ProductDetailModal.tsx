@@ -181,61 +181,73 @@ export function ProductDetailModal({ product, onClose, onAddToCart, theme = {} }
             </button>
           </div>
 
-          {/* "relative" sin overflow-hidden acá (eso queda en la caja de
-              la imagen de abajo) para que la etiqueta/medallón de precio
-              pueda superponerse a la foto sin que se recorte — mismo
-              recurso que ya usan las cards de Catalog.tsx/Catalog3.tsx. */}
-          <div className="relative">
-            <div className="h-64 bg-gray-100 rounded-md overflow-hidden flex items-center justify-center">
-              {fotos.length > 0 ? (
-                // object-contain (no object-cover): se ve la imagen completa
-                // sin recortarla ni deformarla para llenar la caja a la
-                // fuerza — mismo tamaño de caja de siempre, mejor si la
-                // imagen no tiene el mismo aspect-ratio.
-                <img
-                  src={`${apiOrigin}${fotos[selectedIndex]}`}
-                  alt={product.nombre}
-                  className="h-full w-full object-contain"
-                />
-              ) : (
-                <span className="text-gray-400">Sin imagen</span>
+          {/* miniaturas en columna al costado de la foto principal, no en
+              una tira debajo — apiladas en fila quedaban muy apretadas
+              (poco alto real para 64px de miniatura + texto abajo,
+              feedback explícito del usuario). Con scroll vertical propio
+              (mismo alto que la foto, h-64) cuando hay más fotos de las
+              que entran — así el modal no crece de alto por tener 6 fotos
+              en vez de 2. */}
+          <div className="flex gap-3">
+            {fotos.length > 1 && (
+              <div className="flex h-64 shrink-0 flex-col gap-2 overflow-y-auto pr-1">
+                {fotos.map((foto, index) => (
+                  <button
+                    key={foto}
+                    type="button"
+                    onClick={() => setSelectedIndex(index)}
+                    className={`h-16 w-16 shrink-0 rounded-md overflow-hidden border-2 bg-gray-100 cursor-pointer ${
+                      index === selectedIndex ? thumbnailActiveClassName : 'border-transparent'
+                    }`}
+                  >
+                    <img src={`${apiOrigin}${foto}`} alt="" className="h-full w-full object-contain" />
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* "relative" sin overflow-hidden acá (eso queda en la caja de
+                la imagen) para que la etiqueta/medallón de precio pueda
+                superponerse a la foto sin que se recorte — mismo recurso
+                que ya usan las cards de Catalog.tsx/Catalog3.tsx.
+                "min-w-0" para que esta columna se achique correctamente
+                dentro del flex (si no, la imagen podía forzar el ancho del
+                modal en vez de recortarse a su caja). */}
+            <div className="relative min-w-0 flex-1">
+              <div className="h-64 bg-gray-100 rounded-md overflow-hidden flex items-center justify-center">
+                {fotos.length > 0 ? (
+                  // object-contain (no object-cover): se ve la imagen completa
+                  // sin recortarla ni deformarla para llenar la caja a la
+                  // fuerza — mismo tamaño de caja de siempre, mejor si la
+                  // imagen no tiene el mismo aspect-ratio.
+                  <img
+                    src={`${apiOrigin}${fotos[selectedIndex]}`}
+                    alt={product.nombre}
+                    className="h-full w-full object-contain"
+                  />
+                ) : (
+                  <span className="text-gray-400">Sin imagen</span>
+                )}
+              </div>
+
+              {priceTagClassName && (
+                <div
+                  className={`absolute -bottom-3 left-3 z-10 flex items-center gap-1.5 rounded-full py-1 pl-1.5 pr-3 shadow-md ${priceTagClassName}`}
+                >
+                  <span className="h-2.5 w-2.5 rounded-full bg-white" />
+                  {priceNode}
+                </div>
+              )}
+
+              {priceMedallionClassName && (
+                <div
+                  className={`absolute -right-2 -top-2 z-10 rotate-3 rounded-full px-3 py-1.5 shadow-lg ${priceMedallionClassName}`}
+                >
+                  {priceNode}
+                </div>
               )}
             </div>
-
-            {priceTagClassName && (
-              <div
-                className={`absolute -bottom-3 left-3 z-10 flex items-center gap-1.5 rounded-full py-1 pl-1.5 pr-3 shadow-md ${priceTagClassName}`}
-              >
-                <span className="h-2.5 w-2.5 rounded-full bg-white" />
-                {priceNode}
-              </div>
-            )}
-
-            {priceMedallionClassName && (
-              <div
-                className={`absolute -right-2 -top-2 z-10 rotate-3 rounded-full px-3 py-1.5 shadow-lg ${priceMedallionClassName}`}
-              >
-                {priceNode}
-              </div>
-            )}
           </div>
-
-          {fotos.length > 1 && (
-            <div className="flex gap-2 overflow-x-auto">
-              {fotos.map((foto, index) => (
-                <button
-                  key={foto}
-                  type="button"
-                  onClick={() => setSelectedIndex(index)}
-                  className={`h-16 w-16 shrink-0 rounded-md overflow-hidden border-2 bg-gray-100 cursor-pointer ${
-                    index === selectedIndex ? thumbnailActiveClassName : 'border-transparent'
-                  }`}
-                >
-                  <img src={`${apiOrigin}${foto}`} alt="" className="h-full w-full object-contain" />
-                </button>
-              ))}
-            </div>
-          )}
 
           {/* categoría → descripción: bloque único porque darkFooter lo
               envuelve entero en una placa oscura (mismo recurso que la

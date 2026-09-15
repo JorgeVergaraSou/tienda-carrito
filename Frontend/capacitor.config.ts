@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.tiendabasica.tienda',
-  appName: 'Tienda Básica',
+  appId: 'com.tiendacarrito.tienda',
+  appName: 'Tienda en Línea con carrito de compra',
   webDir: 'dist',
   // 'http' en vez del default 'https': el backend de desarrollo corre en HTTP plano
   // (ver network_security_config.xml), y si la app se sirve por HTTPS el WebView

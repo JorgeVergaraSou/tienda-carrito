@@ -450,6 +450,71 @@ los que incluyan productos que él mismo cargó). Declarados en el mismo orden q
   `estado=PENDING` funcionando, detalle de un pedido puntual con sus items, y 404 ante un id
   inexistente.
 
+**Ajuste masivo de precio** (`ProductsModule`, pedido explícito del usuario: editar el precio de a
+un producto por vez no escala con un catálogo de miles — "aumento masivo por categoría" y "masivo
+general" son los dos casos que pidió). Un único endpoint (`PATCH /productos/precios/ajuste-masivo`,
+`@Auth(Role.ADMIN)` exclusivo — a diferencia del resto de las mutaciones de `ProductsController`,
+acá no hay noción de "propios", puede tocar el catálogo entero de un saque, así que ni siquiera deja
+pasar a `USER`) cubre los dos casos con el mismo `BulkPriceAdjustmentDto` en vez de duplicar la
+lógica: `idCategoria` presente = "por categoría", ausente/`null` = "general, todo el catálogo".
+Declarado ANTES de `PATCH :id` en el controller — mismo motivo que `admin/listado` antes de
+`admin/:id`: si se invirtiera el orden, Nest intentaría matchear `precios` como si fuera el `:id`.
+
+- `TipoAjustePrecio` (`common/enums/`, nuevo): `PORCENTAJE` | `FIJO`. `valor` es el mismo campo
+  numérico para los dos tipos y para aumento/descuento — positivo aumenta, negativo baja, así que no
+  hace falta un campo booleano "aumentar"/"bajar" aparte. Para `PORCENTAJE` hay un piso de validación
+  a nivel DTO (`@Min(-100)`, con `@ValidateIf` para que no aplique a `FIJO`, que no tiene ese límite
+  natural).
+- **`ProductsService.ajustarPreciosMasivo`**: un único `UPDATE` con una expresión SQL
+  (`createQueryBuilder().update(ProductEntity).set({ precio: () => 'GREATEST(ROUND(precio * (1 +
+  :valor / 100), 2), 0)' })`, o el equivalente con `+` para `FIJO`) en vez de un `find()` + loop de N
+  `save()` — con miles de productos, MySQL resuelve la fórmula para todas las filas que matcheen en
+  una sola pasada, mucho más rápido que traer todo a memoria. `GREATEST(...,0)` es el piso de
+  seguridad: ningún ajuste puede dejar un precio negativo, sin tener que leer cada precio de
+  antemano para validarlo en JS. `:valor` viaja como parámetro real de TypeORM (`.setParameter`),
+  nunca interpolado a mano en el string SQL.
+- **Afecta productos dados de baja también, a propósito**: un `UPDATE` de TypeORM no filtra
+  soft-delete automáticamente (a diferencia de `find`/`findOne`), y acá se dejó así deliberadamente
+  — un producto pausado conserva el precio ajustado para cuando se reactive, en vez de quedar
+  desactualizado. Si `idCategoria` viene, se valida contra `CategoriesService.findActivaByIdOrThrow`
+  antes de tocar nada (mismo criterio que `resolverCategoria`) — sin este chequeo, un id inexistente
+  no rompería nada (el `WHERE` no matchearía ninguna fila), pero el ADMIN recibiría "0 productos
+  afectados" sin saber si la categoría está vacía o el id está mal.
+- `BulkPriceAdjustmentResponseDto` solo devuelve `productosAfectados` (un conteo, no la lista — con
+  miles de filas no tendría sentido devolver cada producto actualizado).
+- **Verificado contra la base real** (no mockeado): +10% a la categoría "zapatillas" (2 productos,
+  $25000→$27500 y $15000→$16500), +$500 fijo a "pelotas" (3 productos), -5% general a todo el
+  catálogo incluyendo un producto dado de baja a propósito para la prueba (confirmado que también
+  bajó de precio estando inactivo), categoría inexistente → 400, porcentaje -150 → 400 de
+  `class-validator`, rol `USER` → 403. El frontend (panel ADMIN) muestra un preview de cuántos
+  productos afecta la selección antes de aplicar — ver `Frontend/CLAUDE.md`.
+
+**Auditoría de seguridad (pedido explícito del usuario) — sin vulnerabilidades reales, un hallazgo
+menor corregido**. Se probó en vivo contra el backend real (no solo revisión de código): inyección
+SQL en los dos buscadores (`GET /productos?search=`, `GET /ordenes/admin/listado?search=`) con
+payloads UNION-based, boolean-based (`' OR '1'='1`), ciegos por tiempo (`SLEEP(4)`) y destructivos
+(`DROP TABLE`); bypass de login por SQLi; fuerza bruta de login; manipulación de JWT (payload
+alterado, `alg:"none"`); asignación masiva de campos prohibidos al crear un producto; inyección en
+parámetros tipados (`:id`, `categoriaId`, `page`/`limit`); inyección de segundo orden (nombre de
+producto con sintaxis SQL, verificado que se guarda y se lee literal, nunca se ejecuta). **Ningún
+ataque tuvo éxito** — TypeORM parametriza todo (nunca hay SQL armado por concatenación de texto de
+usuario, salvo el ajuste masivo de precio de arriba, que ya usa `:valor` bindeado) y
+`class-validator` con `whitelist`+`forbidNonWhitelisted` rechaza cualquier campo o tipo inesperado
+antes de que llegue a la base.
+
+- **Único hallazgo real, de severidad baja, corregido**: los dos buscadores (`ILike`) no escapaban
+  los comodines de SQL `LIKE` (`%` y `_`) en el texto que manda el usuario — no era una falla de
+  seguridad (nunca permite ejecutar SQL ajeno, el catálogo ya es público), pero significaba que
+  buscar literalmente `%` devolvía "todo" en vez de nada, porque `%` se interpreta como "cualquier
+  secuencia de caracteres". `common/utils/escape-like.util.ts`, nuevo: `escapeLikeWildcards(value)`
+  escapa `\`, `%` y `_` (el backslash primero, para no terminar escapando el escape) antes de armar
+  el patrón `%texto%` — aplicado en `ProductsService.buscarProductos` y en la búsqueda de
+  `OrdersService` (por `nombreContacto`). Con test unitario (`escape-like.util.spec.ts`, 6 casos).
+  Verificado en vivo: antes del fix, buscar `%` devolvía los 5 productos/25 pedidos existentes;
+  después, 0 (ningún nombre real contiene un `%` literal) — sin afectar una búsqueda normal
+  (`search=adidas` sigue devolviendo exactamente ese producto). `npm run build` + `npx jest`
+  (37/37) limpios.
+
 **Identidad de login**: `nickUsuario`, no `email`, es el identificador de login — el email es
 opcional y solo queda asociado a una cuenta la primera vez que se pide recuperar la contraseña
 para esa cuenta (ver `AuthService.requestResetPassword`); una vez seteado, el flujo de reset ya no

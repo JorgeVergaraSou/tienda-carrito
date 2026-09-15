@@ -93,7 +93,7 @@ function DetalleProducto() {
     <div className="min-h-screen bg-c5-bg text-c5-ink font-catalog5">
       <div className="border-b border-white/10">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center gap-8">
-          <span className="shrink-0 text-lg font-semibold tracking-tight">Tienda Básica</span>
+          <span className="shrink-0 text-lg font-semibold tracking-tight">Tienda en Línea con carrito de compra</span>
           <div className="ml-auto flex shrink-0 items-center gap-4">
             <Link
               to="/contacto"

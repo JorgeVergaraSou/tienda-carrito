@@ -31,7 +31,16 @@ const emptyForm: CheckoutFormState = { nombreContacto: '', email: '', telefono: 
  * El carrito se vacía recién cuando el pedido se creó con éxito (justo
  * antes de redirigir), no antes: si `crearOrdenService` falla, el carrito
  * tiene que seguir intacto para que el comprador pueda reintentar sin
- * tener que volver a armar todo. */
+ * tener que volver a armar todo.
+ *
+ * `window.location.href = initPoint` no navega en el mismo instante —
+ * el browser tarda un momento en efectivamente salir de la SPA. En ese
+ * momento el carrito ya está vacío (`clearCart` se disparó antes, ver
+ * arriba), así que sin `redirigiendoAMercadoPago` esta página volvía a
+ * renderizar el estado de "carrito vacío" de más abajo durante esa
+ * ventana — pedido explícito del usuario, con captura: confundía al
+ * cliente, que veía "no hay nada que pagar" justo después de haber
+ * apretado "Pagar" y pensaba que tenía que volver a hacer algo. */
 function CheckoutPage() {
   const items = useSelector((state: AppStore) => state.cart.items);
   const dispatch = useDispatch();
@@ -39,6 +48,7 @@ function CheckoutPage() {
   const [form, setForm] = useState<CheckoutFormState>(emptyForm);
   const [enviando, setEnviando] = useState(false);
   const [formError, setFormError] = useState('');
+  const [redirigiendoAMercadoPago, setRedirigiendoAMercadoPago] = useState(false);
 
   const total = items.reduce((acumulado, item) => acumulado + item.precio * item.cantidad, 0);
 
@@ -62,6 +72,10 @@ function CheckoutPage() {
         items: items.map((item) => ({ idProducto: item.idProducto, cantidad: item.cantidad })),
       });
 
+      // antes de vaciar el carrito (que dispara el re-render que de otro
+      // modo mostraría el estado de "carrito vacío" más abajo, ver el
+      // comentario del componente).
+      setRedirigiendoAMercadoPago(true);
       dispatch(clearCart());
       // navegación dura a propósito (no react-router): initPoint es una
       // URL de Mercado Pago, no una ruta de este sitio.
@@ -71,6 +85,24 @@ function CheckoutPage() {
       setEnviando(false);
     }
   };
+
+  // va antes del check de "carrito vacío" a propósito — ver el comentario
+  // del componente. Sin botones ni links: no hay nada que el cliente
+  // tenga que hacer acá, la redirección es automática.
+  if (redirigiendoAMercadoPago) {
+    return (
+      <div className="mx-auto max-w-lg px-4 py-12 text-center">
+        <div
+          className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-teal-600"
+          aria-hidden="true"
+        />
+        <h1 className="mb-2 text-2xl font-semibold tracking-tight text-slate-900">
+          Procesando tu pedido...
+        </h1>
+        <p className="text-slate-600">Ya casi — te estamos redirigiendo a Mercado Pago para completar el pago.</p>
+      </div>
+    );
+  }
 
   if (items.length === 0) {
     return (

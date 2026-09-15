@@ -183,7 +183,7 @@ function CatalogoCarrusel() {
           </Link>
 
           <span className="order-2 shrink-0 text-lg font-semibold tracking-tight">
-            Tienda Básica
+           Tienda en Línea con carrito de compra
           </span>
 
           <div className="order-3 sm:order-4 ml-auto sm:ml-0 flex shrink-0 items-center gap-4">

@@ -1,7 +1,7 @@
-import type { ComponentType, LazyExoticComponent } from 'react';
+import type { ComponentType, LazyExoticComponent, ReactNode } from 'react';
 
 /**
- * Un diseño de catálogo registrado — ver catalogs.config.ts. La Landing
+ * Un diseño de catálogo registrado — ver catalogs.config.tsx. La Landing
  * (pages/Public/Home) arma sus cards a partir de este tipo, sin conocer
  * los diseños en particular; agregar un catálogo nuevo es una entrada más
  * acá, no tocar Home.tsx.
@@ -31,4 +31,13 @@ export interface CatalogDefinition {
    * necesitar una captura de pantalla real, que se desactualizaría cada
    * vez que cambie el diseño). */
   previewClassName: string;
+  /** marca decorativa opcional sobre el degradé de preview — un eco en
+   * miniatura del recurso visual que ya identifica a ese diseño (la
+   * etiqueta colgante de precio del clásico, el medallón rotado del
+   * departamental, los corchetes dorados de la galería, etc. — ver
+   * "Identidad propia para cada card de producto" en Frontend/CLAUDE.md).
+   * Igual que `previewClassName`: no es una captura real, es una forma de
+   * dar una idea sin desactualizarse. Sin esta prop, la lámina queda solo
+   * con el degradé + nombre, como antes de agregarla. */
+  previewMark?: ReactNode;
 }

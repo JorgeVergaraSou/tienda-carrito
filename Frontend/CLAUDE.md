@@ -1123,6 +1123,27 @@ resumen del lado del frontend:
   JS). Sin ese token configurado, el error del backend llega limpio hasta el form
   (`getErrorMessage`, mismo mecanismo de siempre) y el carrito no se pierde — se probaron los dos
   caminos.
+
+**Bug: pantalla de "carrito vacío" antes de llegar a Mercado Pago** (reporte explícito del usuario,
+con captura). `window.location.href = initPoint` no reemplaza el documento en el mismo instante — el
+browser sigue mostrando esta SPA mientras carga la página de Mercado Pago (puede tardar unos
+segundos de verdad), y en ese momento el carrito ya estaba vacío (`clearCart()` se dispara antes de
+asignar `location.href`, ver arriba), así que `CheckoutPage` volvía a renderizar el estado de
+"Tu carrito está vacío" de más abajo — el cliente veía ese mensaje justo después de apretar "Pagar"
+y podía pensar que tenía que hacer algo más. Fix: nuevo estado `redirigiendoAMercadoPago`, seteado
+`true` justo antes de `clearCart()`/`location.href`, chequeado **antes** que `items.length === 0` en
+el render — mientras está en `true` muestra "Procesando tu pedido..." con un spinner, sin botones ni
+links (no hay nada que el cliente tenga que hacer, la redirección es automática).
+- Verificado con Playwright de una forma no trivial: interceptar la navegación real a
+  `sandbox.mercadopago.com.ar` y abortarla hace que Chromium la corte de golpe (error de navegación,
+  no reproduce el caso real); hubo que interceptarla y **demorar la respuesta unos segundos** en vez
+  de abortarla, para simular la espera real de red que reporta el usuario. Además, tanto
+  `page.locator(...).innerText()` como `page.screenshot()` de Playwright se quedan esperando a que
+  la navegación en curso termine antes de devolver algo (aunque el documento viejo siga pintado en
+  pantalla) — hubo que capturar por `CDPSession.send('Page.captureScreenshot')` directo, sin pasar
+  por esa espera, para poder ver el estado intermedio real. Con eso confirmado: "Procesando tu
+  pedido..." se ve en pantalla durante toda la espera de red a Mercado Pago, nunca "carrito vacío".
+  `npx tsc -b --noEmit` + `npx vite build` + `npm run lint` limpios.
 - **Sin confirmar todavía**: completar un pago de verdad en la página de Mercado Pago y volver a
   `/checkout/resultado` — la página de Mercado Pago devuelve 403 al abrirla desde este entorno de
   desarrollo (probablemente geobloqueo, el navegador automatizado no está en Argentina). No es nada
@@ -1455,6 +1476,101 @@ abrió, no un popup neutro ajeno a la página.
   (`.shadow-xl`, que `Modal.tsx` siempre incluye) en vez de por rol — mismo tipo de falso positivo
   de QA ya documentado antes en esta sección, no un bug real. `npx tsc -b --noEmit` + `npx vite
   build` + `npm run lint` limpios.
+
+**Miniaturas de la galería, en columna al costado** (feedback explícito del usuario con captura:
+"las fotos miniaturas se ven horribles, es como si les faltara lugar... ¿no podrian ir al costado
+de la foto principal?"). La tira horizontal original (`overflow-x-auto`, miniaturas de 64px debajo
+de la foto) quedaba con muy poco alto real para lucir bien. Pasaron a una **columna vertical a la
+izquierda de la foto principal**, misma altura (`h-64`) que la caja de la foto, con
+`overflow-y-auto` propio — si algún producto llegara a tener más fotos de las que entran en esos
+256px, aparece scroll vertical solo en esa columna, sin estirar el modal (pedido explícito: "que
+aparezca un scroll bar"). Afecta a los 6 catálogos por igual, ya que todos comparten
+`ProductDetailModal.tsx` — no hizo falta tocar ningún catálogo individual. La etiqueta
+colgante/medallón de precio (`priceTagClassName`/`priceMedallionClassName`) sigue superpuesta solo
+sobre la foto principal, no sobre la columna de miniaturas (el `relative` que las posiciona envuelve
+únicamente esa caja). Ningún producto real del seed llega a más de 3 fotos (no se pudo capturar el
+scroll en uso con datos reales), pero el mecanismo (`overflow-y-auto` + alto fijo) es CSS estándar,
+no hizo falta forzarlo para confiar en que funciona. Verificado con Playwright en las 6 (desktop +
+mobile 390px): el modal abre, clickear una miniatura cambia la foto principal, el stepper de
+cantidad y "Agregar al carrito" siguen funcionando — sin errores de consola. `npx tsc -b --noEmit` +
+`npx vite build` + `npm run lint` limpios.
+
+**Marca decorativa en las láminas de Home** (pedido explícito del usuario, con captura: "los
+catalogos tienen solo color de fondo en la portada, se les podra agregar algo... para que se vean
+mas lindo"). Cada lámina de `pages/Public/Home/Home.tsx` era antes solo el degradé propio del
+catálogo (`previewClassName`) + el nombre superpuesto — sin nada que la distinguiera de un simple
+bloque de color. Se agregó `previewMark?: ReactNode` a `CatalogDefinition`
+(`catalogs/catalog.types.ts`): un eco en miniatura, hecho con CSS puro (nada de capturas de
+pantalla reales, mismo criterio que ya documenta `previewClassName` — no se desactualiza si el
+diseño cambia), del recurso visual que ya identifica a cada card de producto real (ver "Identidad
+propia para cada card de producto" más arriba) — para que la lámina misma anticipe el diseño, no
+solo su paleta.
+
+- `catalogs.config.ts` pasó a **`catalogs.config.tsx`** (antes no tenía JSX adentro, ahora sí) —
+  se actualizaron todas las referencias en comentarios de otros archivos que lo mencionaban por
+  nombre (`App.tsx`, `catalog.types.ts`, `Catalog2.tsx`–`Catalog5.tsx`). El registro sigue siendo
+  la única fuente de verdad de presentación por catálogo — `Home.tsx` sigue sin conocer los diseños
+  en particular, solo renderiza `{catalog.previewMark}` dentro de la lámina (después del scrim
+  oscuro en el DOM, para que quede legible incluso si el scrim se oscureciera en esa zona a futuro).
+- **Catálogo clásico** — píldora blanca con el mismo "agujero" circular + `$` que la etiqueta
+  colgante real (`Catalog.tsx`).
+- **Catálogo moderno** — swatch de dos tonos en miniatura (franja clara arriba, placa oscura abajo
+  con un trazo rojo), eco de la card de `Catalog2.tsx`.
+- **Catálogo tienda departamental** — medallón circular rotado con `$`, igual que el badge de precio
+  de `Catalog3.tsx`.
+- **Catálogo boutique** — a propósito **sin** silueta de card (ese diseño evita el molde de card
+  deliberadamente, ver su "Historia reciente" de cards) — la marca es tipográfica nomás: un "Aa" en
+  la serif con carácter que el diseño real reserva para títulos, como marca de agua discreta.
+- **Catálogo galería** — los mismos corchetes dorados en esquinas opuestas que reemplazan el borde
+  de card en `CatalogoCarrusel.tsx` (Catalog5).
+- **Catálogo departamental** (Catalog6) — swatch con franja superior + una fila nombre/precio (no
+  apilada, en el mismo renglón) — primera versión probada parecía más un ícono de menú (tres barras
+  apiladas) que una fila de producto; se ajustó a nombre-izquierda/precio-derecha, mismo criterio
+  "denso" que ya usa `ProductCard.tsx` de ese catálogo.
+- **Catálogo técnico** (Catalog7) — franja lateral índigo + "ID 07" en monospace, eco directo de
+  `ProductCard.tsx` (Catalog7).
+- Bug de tooling en el camino: renombrar `catalogs.config.ts` a `.tsx` con el server de Vite ya
+  corriendo dejó su grafo de módulos en un estado inconsistente (pantalla en blanco, 404 pidiendo
+  el archivo viejo con la extensión vieja) — no era un error del código nuevo. Se resolvió matando
+  el proceso de `vite` (puerto 5173) y volviendo a levantarlo con `npm run dev`; si vuelve a pasar
+  después de renombrar un archivo con el dev server corriendo, reiniciarlo primero antes de
+  buscar el bug en otro lado.
+- Verificado visualmente (capturas desktop + mobile) y con `npx tsc -b --noEmit` + `npx vite build`
+  + `npm run lint` limpios.
+
+**Ajuste masivo de precio** (`Admin/Products/`, pedido explícito del usuario: con un catálogo de
+miles de productos, cambiar el precio de a uno por vez no escala — ver `Backend/CLAUDE.md`, misma
+sección, para el endpoint nuevo `PATCH /productos/precios/ajuste-masivo`). Componente nuevo,
+`BulkPriceAdjustmentModal.tsx`, abierto desde un botón "Ajuste masivo de precio" al lado de "+ Nuevo
+producto" en `ProductsListPage.tsx` (mismo patrón de modal que `UserFormModal.tsx`: `open`/`onClose`
++ reset del form al abrir vía "ajustar el estado durante el render", no un `useEffect`).
+
+- Un solo form cubre los dos casos que pidió el usuario ("por categoría" y "general"): un `<select>`
+  "Aplicar a" con "Todo el catálogo" primero y cada categoría después (mismo criterio "(inactiva)"
+  que ya usa `ProductFormPage.tsx` para categorías dadas de baja — pueden seguir teniendo productos
+  activos con precio para ajustar) — mismo mapeo 1:1 con `idCategoria` presente/ausente que resuelve
+  el backend con un único DTO.
+- **Preview de cuántos productos afecta la selección actual**, antes de aplicar nada: reutiliza `GET
+  /productos/admin/listado` (que ya devuelve `total`) con el mismo filtro `categoriaId` que se va a
+  mandar — no hizo falta un endpoint de preview nuevo. Se recalcula cada vez que cambia la categoría
+  elegida.
+- **Confirmación explícita con SweetAlert2** antes de aplicar (mismo patrón que
+  `ProductsListPage.handleToggleActive`), con el valor, el signo y el número real de productos en el
+  texto — a diferencia de "dar de baja" (reversible con un click), deshacer un ajuste masivo
+  significa aplicar otro a mano con el valor inverso, así que vale la pena el paso extra antes de
+  tocar potencialmente miles de filas.
+- `valor` admite negativos (baja de precio), no solo el "aumento" que pidió el usuario — mismo campo
+  y misma fórmula de los dos lados (frontend y backend), así que no costaba nada extra de código
+  soportar también la baja, y es estrictamente más útil.
+- `services/products.service.ts` ganó `bulkPriceAdjustmentService` (`PATCH
+  /productos/precios/ajuste-masivo`) y los tipos `TipoAjustePrecio`/`BulkPriceAdjustmentData`.
+- **Verificado end-to-end con Playwright** (login real contra un usuario ADMIN de prueba creado a
+  propósito para esta verificación, no el admin real del proyecto): el modal muestra el conteo de
+  productos, el conteo se recalcula al cambiar de categoría, la confirmación de SweetAlert2 aparece
+  con el texto correcto (valor + categoría), el mensaje de éxito muestra la cantidad afectada, y el
+  listado de productos refleja el precio nuevo sin recargar la página — sin errores de consola. El
+  usuario ADMIN/USER de prueba se dio de baja (soft-delete) después de verificar, no se dejó activo.
+  `npx tsc -b --noEmit` + `npx vite build` + `npm run lint` limpios.
 
 ## Estado de las herramientas
 

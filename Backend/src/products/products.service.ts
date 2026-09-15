@@ -15,16 +15,20 @@ import { ProductImageEntity } from './entities/product-image.entity';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { FindProductsQueryDto } from './dto/find-products-query.dto';
+import { BulkPriceAdjustmentDto } from './dto/bulk-price-adjustment.dto';
 import {
   PaginatedProductsResponseDto,
   ProductResponseDto,
 } from './dto/responses/product-response.dto';
+import { BulkPriceAdjustmentResponseDto } from './dto/responses/bulk-price-adjustment-response.dto';
 import { CategoriesService } from '@/categories/categories.service';
 import { CategoryEntity } from '@/categories/entities/category.entity';
 import { Role } from '@/common/enums/role.enum';
+import { TipoAjustePrecio } from '@/common/enums/tipo-ajuste-precio.enum';
 import { UserActiveInterface } from '@/common/interfaces/user-active.interface';
 import { UserEntity } from '@/users/entities/user.entity';
 import { handleServiceError } from '@/common/utils/error-handler.util';
+import { escapeLikeWildcards } from '@/common/utils/escape-like.util';
 import { productsErrorLogger } from '@/config/module-loggers';
 import { deleteLogger, insertLogger, updateLogger } from '@/config/db-loggers';
 
@@ -205,7 +209,10 @@ export class ProductsService implements OnApplicationBootstrap {
       const where: FindOptionsWhere<ProductEntity> = {};
 
       if (query.search) {
-        where.nombre = ILike(`%${query.search}%`);
+        // escapeLikeWildcards: sin esto, buscar literalmente "10%" o
+        // "a_b" se interpreta como comodines de LIKE en vez de texto —
+        // ver el comentario del util para el detalle.
+        where.nombre = ILike(`%${escapeLikeWildcards(query.search)}%`);
       }
 
       if (query.categoriaId) {
@@ -377,6 +384,78 @@ export class ProductsService implements OnApplicationBootstrap {
         'ProductsService.actualizarProducto',
         'Ocurrió un error al actualizar el producto',
         { id },
+      );
+    }
+  }
+
+  /** ajuste masivo de precio — ver BulkPriceAdjustmentDto para el
+   * contrato completo (por categoría vs. general, porcentaje vs. fijo).
+   * ADMIN-only (ver ProductsController): a diferencia de crear/editar un
+   * producto individual, este endpoint puede tocar miles de filas de una
+   * sola vez, así que no es algo que un USER deba poder disparar sobre el
+   * catálogo entero aunque sea dueño de algunos de esos productos.
+   *
+   * Implementado como un único UPDATE con una expresión SQL (no un
+   * find() + loop de N save()) a propósito: con miles de productos, leer
+   * todo a memoria y guardarlos de a uno sería lento y innecesario —
+   * MySQL puede resolver "precio = precio * 1.1" para todas las filas que
+   * matcheen en una sola pasada. GREATEST(...,0) es el piso de seguridad:
+   * ningún ajuste (ni un % muy negativo, ni un descuento fijo mayor al
+   * precio actual) puede dejar un precio negativo, sin necesidad de leer
+   * cada precio de antemano para validarlo en JS. */
+  async ajustarPreciosMasivo(
+    dto: BulkPriceAdjustmentDto,
+  ): Promise<BulkPriceAdjustmentResponseDto> {
+    try {
+      if (dto.idCategoria !== undefined && dto.idCategoria !== null) {
+        // valida que la categoría exista antes de tocar nada — mismo
+        // criterio que resolverCategoria: sin este chequeo, un id
+        // inexistente no rompería nada (el WHERE de abajo simplemente no
+        // matchearía ninguna fila), pero el admin recibiría "0 productos
+        // afectados" sin saber si eso es porque la categoría está vacía o
+        // porque el id está mal.
+        await this.categoriesService.findActivaByIdOrThrow(dto.idCategoria);
+      }
+
+      const formula =
+        dto.tipo === TipoAjustePrecio.PORCENTAJE
+          ? 'GREATEST(ROUND(precio * (1 + :valor / 100), 2), 0)'
+          : 'GREATEST(ROUND(precio + :valor, 2), 0)';
+
+      const queryBuilder = this.productRepository
+        .createQueryBuilder()
+        .update(ProductEntity)
+        .set({ precio: () => formula })
+        .setParameter('valor', dto.valor);
+
+      // sin idCategoria: afecta TODO el catálogo, productos dados de baja
+      // incluidos — un UPDATE de TypeORM no filtra soft-delete
+      // automáticamente (a diferencia de find/findOne), y acá es
+      // deliberado: un producto pausado conserva el precio ajustado para
+      // cuando se reactive, en vez de quedar con un precio desactualizado.
+      if (dto.idCategoria !== undefined && dto.idCategoria !== null) {
+        queryBuilder.where('id_categoria = :idCategoria', {
+          idCategoria: dto.idCategoria,
+        });
+      }
+
+      const result = await queryBuilder.execute();
+      const productosAfectados = result.affected ?? 0;
+
+      updateLogger.info(
+        `Ajuste masivo de precio: tipo=${dto.tipo} valor=${dto.valor} categoria=${
+          dto.idCategoria ?? 'todas'
+        } productosAfectados=${productosAfectados}`,
+      );
+
+      return { productosAfectados };
+    } catch (error) {
+      handleServiceError(
+        error,
+        productsErrorLogger,
+        'ProductsService.ajustarPreciosMasivo',
+        'Error al aplicar el ajuste masivo de precio',
+        { idCategoria: dto.idCategoria, tipo: dto.tipo, valor: dto.valor },
       );
     }
   }

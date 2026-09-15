@@ -25,6 +25,7 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { FindProductsQueryDto } from './dto/find-products-query.dto';
 import { UpdateStockVisibilityDto } from './dto/update-stock-visibility.dto';
+import { BulkPriceAdjustmentDto } from './dto/bulk-price-adjustment.dto';
 
 @Controller('productos')
 export class ProductsController {
@@ -85,6 +86,20 @@ export class ProductsController {
     @ActiveUser() user: UserActiveInterface,
   ) {
     return this.productsService.crearProducto(dto, user);
+  }
+
+  /** ajuste masivo de precio (por categoría, o general a todo el
+   * catálogo — ver BulkPriceAdjustmentDto). ADMIN-only, a diferencia del
+   * resto de las mutaciones de este controller que también dejan pasar a
+   * USER para sus propios productos: acá no hay "propios", puede tocar
+   * el catálogo entero de un saque. Declarado ANTES de PATCH ':id' —
+   * mismo motivo que 'admin/listado' antes de 'admin/:id' más arriba: si
+   * se invirtiera el orden, Nest intentaría matchear "precios" como si
+   * fuera el :id de la ruta de abajo. */
+  @Auth(Role.ADMIN)
+  @Patch('precios/ajuste-masivo')
+  async ajusteMasivoPrecio(@Body() dto: BulkPriceAdjustmentDto) {
+    return this.productsService.ajustarPreciosMasivo(dto);
   }
 
   @Auth(Role.ADMIN)

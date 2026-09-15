@@ -163,3 +163,30 @@ export const deleteProductPhotoService = async (
 
   return res.data;
 };
+
+export type TipoAjustePrecio = 'PORCENTAJE' | 'FIJO';
+
+export interface BulkPriceAdjustmentData {
+  // sin este campo (o en null) el ajuste aplica a TODO el catálogo — ver
+  // BulkPriceAdjustmentDto en el backend.
+  idCategoria?: number | null;
+  tipo: TipoAjustePrecio;
+  // positivo = aumento, negativo = descuento (ver BulkPriceAdjustmentDto).
+  valor: number;
+}
+
+export interface BulkPriceAdjustmentResult {
+  productosAfectados: number;
+}
+
+/** Ajuste masivo de precio — por categoría o general a todo el catálogo,
+ * porcentaje o monto fijo (ver ProductsController.ajusteMasivoPrecio /
+ * BulkPriceAdjustmentDto en el backend). ADMIN-only. */
+export const bulkPriceAdjustmentService = async (
+  data: BulkPriceAdjustmentData,
+): Promise<BulkPriceAdjustmentResult> => {
+
+  const res = await api.patch('/productos/precios/ajuste-masivo', data);
+
+  return res.data;
+};

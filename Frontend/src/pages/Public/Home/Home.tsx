@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { catalogs } from '@/catalogs';
 
 /** Landing pública — punto de entrada a los distintos diseños de catálogo
- * registrados en src/catalogs/catalogs.config.ts (ver ese archivo para
+ * registrados en src/catalogs/catalogs.config.tsx (ver ese archivo para
  * agregar uno nuevo). Montada en '/' (ver App.tsx); el catálogo clásico,
  * que antes vivía acá, se movió a '/catalog' sin tocar su código — ver
  * Frontend/CLAUDE.md.
@@ -19,7 +19,7 @@ function Home() {
       <div className="bg-slate-800">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
           <span className="text-lg font-extrabold text-white tracking-tight">
-            Tienda Básica
+            Tienda en Línea con carrito de compra
           </span>
           <Link
             to="/contacto"
@@ -51,12 +51,18 @@ function Home() {
               className="group flex flex-col rounded-2xl overflow-hidden border border-slate-200 bg-white transition-shadow hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-teal-600"
             >
               {/* la lámina entera es el degradé propio de cada diseño (ver
-                  catalogs.config.ts) — no una captura real de la página,
+                  catalogs.config.tsx) — no una captura real de la página,
                   así no se desactualiza si el diseño cambia. El nombre va
                   superpuesto con un scrim oscuro abajo, en vez de vivir
-                  como texto aparte debajo de una franja de color chica. */}
-              <div className={`relative h-40 ${catalog.previewClassName}`}>
+                  como texto aparte debajo de una franja de color chica.
+                  `previewMark` (opcional) es un eco en miniatura del
+                  recurso visual que ya identifica a ese diseño — sin él,
+                  la lámina queda solo con el degradé, como antes de
+                  agregarlo (pedido explícito del usuario: el degradé liso
+                  solo). */}
+              <div className={`relative h-40 overflow-hidden ${catalog.previewClassName}`}>
                 <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/0 to-black/0" />
+                {catalog.previewMark}
                 <h2 className="absolute bottom-3 left-4 right-4 text-xl font-bold text-white tracking-tight">
                   {catalog.name}
                 </h2>

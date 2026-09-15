@@ -28,6 +28,7 @@ import { ProductEntity } from '@/products/entities/product.entity';
 import { ProductsService } from '@/products/products.service';
 import { MercadoPagoService } from '@/mercadopago/mercadopago.service';
 import { handleServiceError } from '@/common/utils/error-handler.util';
+import { escapeLikeWildcards } from '@/common/utils/escape-like.util';
 import { ordersErrorLogger } from '@/config/module-loggers';
 import { insertLogger, updateLogger } from '@/config/db-loggers';
 
@@ -338,7 +339,10 @@ export class OrdersService {
       const where: FindOptionsWhere<OrderEntity> = {};
 
       if (query.search) {
-        where.nombreContacto = ILike(`%${query.search}%`);
+        // escapeLikeWildcards: mismo criterio que
+        // ProductsService.buscarProductos — sin esto, buscar "%" o "_"
+        // literales se interpreta como comodines de LIKE.
+        where.nombreContacto = ILike(`%${escapeLikeWildcards(query.search)}%`);
       }
 
       if (query.estado) {

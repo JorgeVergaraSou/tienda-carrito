@@ -12,6 +12,7 @@ import { getErrorMessage, apiOrigin } from '@/utilities';
 import { showError } from '@/utilities/alerts/alert.utils';
 import { Button, BanIcon, CheckCircleIcon, PencilIcon, EmptyState, PageHeader } from '@/components/ui';
 import { InputBuscarProductos } from '@/components/ProductSearch/InputBuscarProductos';
+import { BulkPriceAdjustmentModal } from './BulkPriceAdjustmentModal';
 
 // mismo criterio que Catalog.tsx: el backend ya soporta paginado por
 // cantidad (GET /productos/admin/listado acepta page/limit, límite máximo
@@ -38,6 +39,7 @@ function ProductsListPage() {
 
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
 
   useEffect(() => {
     let cancelado = false;
@@ -116,10 +118,21 @@ function ProductsListPage() {
         title="Productos"
         description="Catálogo completo, incluidos los dados de baja."
         action={
-          <Button onClick={() => navigate(`/${PrivateRoutes.ADMIN}/productos/nuevo`)}>
-            + Nuevo producto
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => setBulkModalOpen(true)}>
+              Ajuste masivo de precio
+            </Button>
+            <Button onClick={() => navigate(`/${PrivateRoutes.ADMIN}/productos/nuevo`)}>
+              + Nuevo producto
+            </Button>
+          </div>
         }
+      />
+
+      <BulkPriceAdjustmentModal
+        open={bulkModalOpen}
+        onClose={() => setBulkModalOpen(false)}
+        onApplied={() => setReloadToken((token) => token + 1)}
       />
 
       <form onSubmit={handleSearchSubmit} className="mb-4 flex gap-2">

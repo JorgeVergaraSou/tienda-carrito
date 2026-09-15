@@ -44,7 +44,7 @@ function App() {
                 {/* Rutas públicas — la Landing (elegir diseño de catálogo)
                     es la home del sitio, sin login. Cada diseño se monta
                     en su propia ruta a partir del registro central (ver
-                    src/catalogs/catalogs.config.ts) — agregar un catálogo
+                    src/catalogs/catalogs.config.tsx) — agregar un catálogo
                     nuevo no requiere tocar este archivo, solo sumar una
                     entrada ahí. */}
                 <Route path='/' element={<Home />} />

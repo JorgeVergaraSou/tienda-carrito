@@ -9,7 +9,7 @@ import DetalleProducto from './DetalleProducto';
  * puntualmente a `/catalog5`. Mismo patrón que ya usan
  * `pages/Private/Admin/Admin.tsx`/`User/User.tsx` (RoutesWithNotFound +
  * <Routes> anidado) — por eso está registrado como `'catalog5/*'` en
- * catalogs.config.ts, no como un path exacto.
+ * catalogs.config.tsx, no como un path exacto.
  *
  * - `/catalog5` → CatalogoCarrusel (la galería)
  * - `/catalog5/detalleproducto/:id` → DetalleProducto

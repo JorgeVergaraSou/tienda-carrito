@@ -53,7 +53,7 @@ function Login() {
       <div className="w-full max-w-sm">
         <div className="mb-6 text-center">
           <Link to="/" className="text-lg font-extrabold tracking-tight text-slate-900">
-            Tienda Básica
+            Tienda en Línea con carrito de compra
           </Link>
           <h1 className="mt-3 text-xl font-semibold text-slate-900">Iniciar sesión</h1>
           <p className="mt-1 text-sm text-slate-500">Panel de administración y cuenta de usuario.</p>

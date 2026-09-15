@@ -32,7 +32,7 @@ function categoriaLinkClass(active: boolean): string {
  * index.css — ningún otro catálogo usa verde), serif con carácter
  * (Fraunces) solo para títulos y nombres de producto, sin banner-degradé
  * ni cards redondeadas/con sombra — separadas por una línea fina, mucho
- * aire alrededor de la imagen. Registrado en src/catalogs/catalogs.config.ts,
+ * aire alrededor de la imagen. Registrado en src/catalogs/catalogs.config.tsx,
  * montado en '/catalog4' (ver App.tsx).
  *
  * Tampoco tiene badges de descuento/cuotas/envío — mismo criterio que ya
@@ -163,7 +163,7 @@ function Catalog4() {
           </Link>
 
           <span className="order-2 shrink-0 font-catalog4-display italic text-lg font-semibold tracking-tight">
-            Tienda Básica
+            Tienda en Línea con carrito de compra
           </span>
 
           <div className="order-3 sm:order-4 ml-auto sm:ml-0 flex shrink-0 items-center gap-4">

@@ -35,7 +35,7 @@ function tabClass(active: boolean): string {
  * rosa/fucsia, tipografía redondeada (Poppins), banner destacado grande,
  * pestañas de categoría subrayadas (en vez de pills en marquesina o
  * sidebar de filtros) y cards blancas muy redondeadas. Registrado en
- * src/catalogs/catalogs.config.ts, montado en '/catalog3' (ver App.tsx).
+ * src/catalogs/catalogs.config.tsx, montado en '/catalog3' (ver App.tsx).
  *
  * A propósito NO tiene nada que el modelo de datos de este proyecto no
  * respalde (% de descuento, "antes/ahora", cuotas sin interés, favoritos)
@@ -167,7 +167,7 @@ function Catalog3() {
           </Link>
 
           <span className="order-2 shrink-0 text-xl font-extrabold text-fuchsia-700 tracking-tight">
-            Tienda Básica
+            Tienda en Línea con carrito de compra
           </span>
 
           <div className="order-3 sm:order-4 ml-auto sm:ml-0 flex shrink-0 items-center gap-4">
