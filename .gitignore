@@ -14,7 +14,14 @@ build/
 *.log
 
 # IDE
-.vscode/
+# .vscode/settings.json SÍ se versiona a propósito (ver la excepción de
+# abajo): fija qué TypeScript usa el editor (Backend/node_modules, no el
+# de Frontend ni el de la ventana) — sin esto, cualquiera que clone el
+# repo y abra la carpeta entera en VS Code vuelve a pisar el mismo lío de
+# "dos TypeScript en una sola ventana" (ver Backend/CLAUDE.md). El resto
+# de .vscode/ (launch.json, extensions personales, etc.) sigue ignorado.
+.vscode/*
+!.vscode/settings.json
 .idea/
 
 # Sistema operativo

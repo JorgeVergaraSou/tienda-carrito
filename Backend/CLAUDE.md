@@ -53,6 +53,28 @@ dos compilan a `dist/` en paralelo y se pisan (`MODULE_NOT_FOUND` / `EADDRINUSE`
 Si necesitás un build limpio con el watcher activo, primero matá el proceso de `start:dev` (o
 dejá que su propia recompilación incremental valide el cambio) y recién ahí corré `build`.
 
+**Gotcha de editor — VS Code puede marcar errores en `tsconfig.json` que el build real no tiene**
+(reporte del usuario, con captura del panel de Problemas). Dos causas distintas, dos arreglos
+distintos:
+- **`rootDir` y `test/**/*` no coincidían**: `tsconfig.json` (el que usan el editor y `ts-jest` —
+  `package.json` no le pasa un `tsConfig` propio) tenía `rootDir: "./src"` pero también incluye
+  `test/**/*` en su `include`, que queda fuera de ese `rootDir` — TS6059 en el editor. Nunca
+  rompió nada real porque `npm run build` (`nest build`) usa `tsconfig.build.json`, que excluye
+  `test/` y **no** tenía `rootDir` propio (lo heredaba del padre). Arreglo: `rootDir` se movió de
+  `tsconfig.json` a `tsconfig.build.json` (el único que de verdad compila a `dist/`) — la
+  estructura de `dist/` queda idéntica (verificado con `rm -rf dist && npm run build`), y
+  `tsconfig.json` ya no fuerza un `rootDir` que test/ viola.
+- **`moduleResolution`/`baseUrl` "deprecados"**: el editor pedía `"ignoreDeprecations": "6.0"`,
+  pero la versión real de TypeScript de este proyecto (5.8.3, `package.json`) **no reconoce ese
+  valor** — probado: romper `npm run build` con `TS5103: Invalid value for --ignoreDeprecations`
+  en el momento. Quedó en `"5.0"` (el valor correcto para la versión instalada). Si VS Code sigue
+  marcándolo, es porque el editor está tipando con una versión de TypeScript más nueva que la
+  instalada acá — se soluciona desde VS Code (`Ctrl+Shift+P` → "TypeScript: Select TypeScript
+  Version" → "Use Workspace Version"), no subiendo este número a algo que el compilador real de
+  este proyecto no entiende.
+- Verificado: `rm -rf dist && npm run build` limpio, `npx tsc --noEmit -p tsconfig.json` sin
+  errores (antes tiraba TS6059), `npx jest` 37/37.
+
 ## Variables de entorno
 
 La configuración se valida de entrada al bootear, con un schema de Joi en

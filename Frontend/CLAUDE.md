@@ -1572,6 +1572,30 @@ producto" en `ProductsListPage.tsx` (mismo patrón de modal que `UserFormModal.t
   usuario ADMIN/USER de prueba se dio de baja (soft-delete) después de verificar, no se dejó activo.
   `npx tsc -b --noEmit` + `npx vite build` + `npm run lint` limpios.
 
+**Bug: el mensaje de error del login desaparecía casi al instante** (reporte explícito del usuario:
+"en menos de un segundo pasa de auditar todo y volver el formulario a 0, el cliente nunca sabe que
+pasó"). Causa real: el interceptor de respuesta de `api/axios.ts` trata **cualquier** 401 como
+"la sesión venció" — borra `localStorage` y hace `window.location.href = '/login'` (recarga dura).
+Pero un 401 de `POST /auth/login` no es "tu sesión venció", es "la contraseña que acabás de
+escribir está mal" — el `catch` de `Login.tsx` sí alcanzaba a hacer `setError(...)`, pero un
+instante después la recarga dura del interceptor se llevaba puesto ese estado (y todo el resto del
+DOM) antes de que el usuario llegara a leerlo. Con "Demasiados intentos" (429 del `ThrottlerGuard`)
+no pasaba esto — un 429 no entra en la rama del 401, se veía bien — pero el usuario lo reportó en
+la misma sesión de pruebas donde venía de fallar la contraseña varias veces.
+
+- **Arreglo de una condición**: el interceptor ahora excluye `error.config?.url === '/auth/login'`
+  de la redirección forzada — un 401 de esa request puntual cae al manejo normal (el `message` del
+  backend se extrae igual y se re-lanza como `Error`, `Login.tsx` lo muestra con `setError` como
+  siempre). El resto de los 401 (un token guardado que venció o es inválido, en cualquier otra
+  request autenticada) sigue disparando el logout + redirect sin cambios.
+- **Verificado con Playwright**: intentar loguearse con una contraseña incorrecta ahora deja el
+  mensaje "Usuario o contraseña inválidos" visible en pantalla, **cero navegaciones** después del
+  submit (antes recargaba la página entera) y el campo de contraseña conserva lo que se había
+  escrito. Prueba de regresión aparte: una sesión vieja de verdad (token inválido inyectado en
+  `localStorage`, mismo formato que `createUser`) sigue redirigiendo a `/login` y limpiando la
+  sesión como siempre — el fix no afecta ese caso. `npx tsc -b --noEmit` + `npx vite build` +
+  `npm run lint` limpios.
+
 ## Estado de las herramientas
 
 - `npm run dev` — Vite dev server.

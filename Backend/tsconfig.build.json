@@ -1,4 +1,8 @@
 {
   "extends": "./tsconfig.json",
+  // rootDir vive acá (no en tsconfig.json) — ver el comentario de ese
+  // archivo. Este es el único tsconfig que de verdad compila a dist/, así
+  // que es el lugar correcto para fijar la estructura de salida.
+  "compilerOptions": { "rootDir": "./src" },
   "exclude": ["node_modules", "test", "dist", "**/*spec.ts"]
 }

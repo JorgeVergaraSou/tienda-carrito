@@ -1,0 +1,11 @@
+{
+  // Sin esto, VS Code usa su propio TypeScript "de fábrica" (más nuevo
+  // que el que este proyecto tiene instalado) para el panel de Problemas
+  // — por eso marcaba deprecaciones (moduleResolution/baseUrl) que la
+  // versión real del proyecto (Backend/node_modules, ver package.json)
+  // ni siquiera conoce todavía. Con esto, el editor tipa con la MISMA
+  // versión que compila de verdad (npm run build), así el panel de
+  // Problemas refleja el build real en vez de una versión futura.
+  "typescript.tsdk": "Backend/node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true
+}

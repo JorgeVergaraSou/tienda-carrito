@@ -40,7 +40,19 @@ api.interceptors.response.use(
 
   (error) => {
 
-    if (error.response?.status === 401) {
+    // un 401 de /auth/login NO es "tu sesión venció" — es "la contraseña
+    // que acabás de escribir está mal" (o el usuario no existe). Antes
+    // esto se trataba igual que cualquier otro 401 y disparaba una
+    // recarga dura a /login: el catch de Login.tsx alcanzaba a hacer
+    // setError(...), pero un instante después la página entera se
+    // recargaba (window.location.href) y se llevaba puesto ese estado —
+    // el formulario "volvía a cero" en menos de un segundo y el usuario
+    // nunca llegaba a leer el mensaje (bug real, reportado por el
+    // usuario). El resto de los 401 (un token guardado que venció o es
+    // inválido) sigue yendo por la rama de abajo sin cambios.
+    const esIntentoDeLogin = error.config?.url === '/auth/login';
+
+    if (error.response?.status === 401 && !esIntentoDeLogin) {
 
       localStorage.removeItem(UserKey);
 

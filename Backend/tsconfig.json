@@ -4,7 +4,17 @@
     "module": "commonjs",
     "lib": ["ES2021"],
     "outDir": "./dist",
-    "rootDir": "./src",
+    // rootDir NO va acá (a propósito) — este tsconfig.json es el que usan
+    // el editor y ts-jest (ver "jest" en package.json, sin tsConfig
+    // propio) para tipar TODO, incluida test/**/* (ver "include" abajo).
+    // Con "./src" acá, cualquier archivo de test/ queda "fuera de
+    // rootDir" y VS Code lo marca como error (TS6059) — un falso positivo
+    // que no afecta nada real: el build de verdad (`npm run build` →
+    // `nest build`) usa tsconfig.build.json, que excluye test/ y agrega
+    // su propio rootDir: "./src" ahí, donde sí corresponde (ver ese
+    // archivo). Acá, sin rootDir explícito, TypeScript lo infiere solo a
+    // partir de los archivos incluidos — no rompe nada, solo deja de
+    // quejarse por algo que nunca se iba a compilar con este config.
 
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
@@ -24,8 +34,19 @@
     "removeComments": true,
     "sourceMap": true,
 
-    // ⚠️ Comentar o mantener según versión
-     "ignoreDeprecations": "5.0"
+    // "moduleResolution": "node" (alias de "node10") y "baseUrl" siguen
+    // siendo válidos en la versión de TypeScript que usa el proyecto de
+    // verdad (5.8.3, ver package.json) — recién se sacan en la 7.0. Este
+    // valor tiene que coincidir con lo que esa versión real entiende:
+    // "6.0" acá rompe la compilación (TS5103, "Invalid value for
+    // --ignoreDeprecations" — probado). Si VS Code marca este mismo
+    // archivo pidiendo "6.0", es porque el editor está tipando con una
+    // versión de TypeScript más nueva que la instalada en el proyecto —
+    // eso se arregla desde VS Code (abajo a la derecha con un .ts
+    // abierto, o Ctrl+Shift+P → "TypeScript: Select TypeScript Version" →
+    // "Use Workspace Version"), no subiendo este número a lo que pide un
+    // TS que este proyecto no tiene instalado.
+    "ignoreDeprecations": "5.0"
   },
   "include": ["src/**/*", "test/**/*"],
   "exclude": ["node_modules", "dist"]
