@@ -1,6 +1,6 @@
 import { applyDecorators } from '@nestjs/common';
 import { Transform } from 'class-transformer';
-import { IsString, Matches, MinLength } from 'class-validator';
+import { IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 /**
  * Política de contraseña única para todo el proyecto (mínimo 8 caracteres,
@@ -19,6 +19,11 @@ export function IsPassword() {
     IsString({ message: 'La contraseña debe ser una cadena de texto.' }),
     MinLength(8, {
       message: 'La contraseña debe tener al menos 8 caracteres.',
+    }),
+    // sin tope, una contraseña de miles de caracteres le cuesta CPU a
+    // argon2 en cada pedido (denegación de servicio barata)
+    MaxLength(128, {
+      message: 'La contraseña no puede superar los 128 caracteres.',
     }),
     Matches(/[0-9]/, {
       message: 'La contraseña debe contener al menos un número.',

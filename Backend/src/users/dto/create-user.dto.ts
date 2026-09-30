@@ -1,4 +1,4 @@
-import { Transform } from 'class-transformer';
+import { RecortarTexto } from '@/common/decorators/recortar-texto.decorator';
 import {
   IsEmail,
   IsEnum,
@@ -15,13 +15,13 @@ export class CreateUserDto {
   nickUsuario: string;
 
   @IsOptional()
-  @Transform(({ value }) => value.trim())
+  @RecortarTexto()
   @IsString({ message: 'El nombre debe ser una cadena de texto.' })
   @MinLength(3, { message: 'El nombre debe tener al menos 3 caracteres.' })
   nombre?: string;
 
   @IsOptional()
-  @Transform(({ value }) => value.trim())
+  @RecortarTexto()
   @IsString({ message: 'El nombre debe ser una cadena de texto.' })
   @MinLength(3, { message: 'El nombre debe tener al menos 3 caracteres.' })
   apellido?: string;

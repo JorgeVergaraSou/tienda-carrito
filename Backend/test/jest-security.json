@@ -1,0 +1,16 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": ".",
+  "testEnvironment": "node",
+  "testRegex": "security/.*\\.e2e-spec\\.ts$",
+  "transform": {
+    "^.+\\.(t|j)s$": "ts-jest"
+  },
+  "moduleNameMapper": {
+    "^@/(.*)$": "<rootDir>/../src/$1"
+  },
+  "setupFiles": ["<rootDir>/security/setup-env.ts"],
+  "setupFilesAfterEnv": ["<rootDir>/security/setup-after-env.ts"],
+  "maxWorkers": 1,
+  "testTimeout": 60000
+}

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   HttpException,
   InternalServerErrorException,
@@ -55,21 +56,25 @@ export function handleServiceError(
       throw new ConflictException('El valor ya está en uso');
     }
 
-    throw new InternalServerErrorException(
-      `Error SQL: ${(error as any).message}`,
-    );
+    // un dato que no entra en la columna (texto más largo, número fuera de
+    // rango): es un error del CLIENTE, no del servidor — 400 con un mensaje
+    // genérico. Los DTOs ya validan los límites de cada campo; esto es la
+    // red de seguridad para el que se les escape.
+    const errno = (error as any).driverError?.errno;
+    if ([1406, 1264, 1265, 1366, 1292].includes(errno)) {
+      throw new BadRequestException(
+        'Alguno de los datos enviados no es válido o supera el límite permitido',
+      );
+    }
+
+    // el mensaje real del error SQL (nombres de tablas y columnas, la
+    // consulta) queda en el log de arriba; al cliente NUNCA se le devuelve.
+    throw new InternalServerErrorException(defaultMessage);
   }
 
-  if (error instanceof EntityNotFoundError) {
-    throw new InternalServerErrorException(
-      `Entidad no encontrada: ${(error as any).message}`,
-    );
-  }
-
-  if (error instanceof TypeORMError) {
-    throw new InternalServerErrorException(
-      `Error de TypeORM: ${error.message}`,
-    );
+  // igual que arriba: el detalle queda en el log, no en la respuesta
+  if (error instanceof EntityNotFoundError || error instanceof TypeORMError) {
+    throw new InternalServerErrorException(defaultMessage);
   }
 
   throw new InternalServerErrorException(defaultMessage);

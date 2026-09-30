@@ -140,7 +140,12 @@ export class UsersService {
     resetPasswordToken: string,
   ): Promise<UserEntity | null> {
     try {
-      return await this.userRepository.findOneBy({ resetPasswordToken });
+      // las columnas del token son select:false (ver UserEntity): hay que
+      // pedir explícito la fecha de vencimiento que valida el llamador.
+      return await this.userRepository.findOne({
+        where: { resetPasswordToken },
+        select: ['idUser', 'resetPasswordTokenExpiresAt'],
+      });
     } catch (error) {
       handleServiceError(
         error,
@@ -167,6 +172,7 @@ export class UsersService {
           'email',
           'role',
           'password',
+          'passwordChangedAt',
         ],
       });
     } catch (error) {
@@ -294,7 +300,14 @@ export class UsersService {
         return;
       }
 
-      await this.userRepository.update(id, updateData);
+      await this.userRepository.update(id, {
+        ...updateData,
+        // cambiar la clave invalida los tokens emitidos antes (ver
+        // UserEntity.passwordChangedAt / AuthGuard)
+        ...(fieldsUpdated.includes('password')
+          ? { passwordChangedAt: new Date() }
+          : {}),
+      });
 
       // 👉 solo se loguean los nombres de los campos tocados, nunca sus
       // valores (podría incluir password) — alcanza para auditar "qué"
@@ -374,6 +387,8 @@ export class UsersService {
 
       if (dto.password) {
         updateData.password = await argon2.hash(dto.password);
+        // invalida los tokens de sesión que el usuario tenía abiertos
+        updateData.passwordChangedAt = new Date();
         fieldsUpdated.push('password');
       }
 
@@ -394,30 +409,6 @@ export class UsersService {
         usersErrorLogger,
         'UsersService.actualizarUsuarioAdmin',
         'Ocurrió un error al actualizar el usuario',
-        { id },
-      );
-    }
-  }
-
-  /** asocia un email al usuario. Se usa la primera vez que pide recuperar
-   * su clave y todavía no tiene email guardado (ver
-   * AuthService.requestResetPassword). */
-  async setEmail(id: number, email: string): Promise<{ success: boolean }> {
-    try {
-      const result = await this.userRepository.update(id, { email });
-      const success = !!(result.affected && result.affected > 0);
-
-      if (success) {
-        updateLogger.info(`Email asociado (ID ${id}): ${email}`);
-      }
-
-      return { success };
-    } catch (error) {
-      handleServiceError(
-        error,
-        usersErrorLogger,
-        'UsersService.setEmail',
-        'Error al asociar el email',
         { id },
       );
     }
@@ -464,6 +455,8 @@ export class UsersService {
         password: hashedPassword,
         resetPasswordToken: null,
         resetPasswordTokenExpiresAt: null,
+        // los tokens de sesión emitidos antes del reseteo dejan de valer
+        passwordChangedAt: new Date(),
       });
       const success = !!(result.affected && result.affected > 0);
 
@@ -483,8 +476,16 @@ export class UsersService {
     }
   }
 
-  async darDeBajaUsuario(id: number): Promise<void> {
+  /** `actorId`: quién ejecuta la baja (el ADMIN de la sesión). Un ADMIN no
+   * puede darse de baja a sí mismo — con un único ADMIN ya lo frenaba
+   * esUnicoAdminActivo, pero con dos o más podía quedarse sin acceso por
+   * un click de más (y la cuenta solo se recupera tocando la base). */
+  async darDeBajaUsuario(id: number, actorId: number): Promise<void> {
     try {
+      if (id === actorId) {
+        throw new BadRequestException('No podés darte de baja a vos mismo');
+      }
+
       const user = await this.getUserWithDeleted(id); // Lanza NotFoundException si no existe
 
       if (user.deletedAt) {

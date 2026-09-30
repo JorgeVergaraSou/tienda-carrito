@@ -35,6 +35,10 @@ import * as Joi from 'joi';
         MAIL_FROM_NAME: Joi.string().allow('').optional(),
         FRONTEND_URL: Joi.string().uri().optional(),
         CORS_ORIGIN: Joi.string().allow('').optional(),
+        // cantidad de proxies inversos de confianza delante de la app (ver
+        // configureApp en app.setup.ts) — sin definir, no se confía en
+        // X-Forwarded-For
+        TRUST_PROXY: Joi.string().allow('').optional(),
         PORT: Joi.number().default(3006),
         SEED_ADMIN_NICK: Joi.string().allow('').optional(),
         SEED_ADMIN_EMAIL: Joi.string().allow('').optional(),
@@ -62,11 +66,33 @@ import * as Joi from 'joi';
     // Registrar WinstonModule globalmente con tu configuración
     WinstonModule.forRoot(winstonConfig),
 
-    // Límite base para las rutas que usen @Throttle() (hoy: login y
-    // requestResetPassword en auth/). No aplica solo, cada ruta lo activa
-    // con @UseGuards(ThrottlerGuard).
+    // Límite base para las rutas que usen @Throttle() (login,
+    // requestResetPassword, contacto, pedidos, webhook). No aplica solo,
+    // cada ruta lo activa con @UseGuards(ThrottlerGuard).
+    //
+    // 'login' es un segundo contador SOLO para POST /auth/login: cuenta por
+    // IP + nickUsuario (5 por minuto). Así 5 claves malas contra "maria" no
+    // bloquean el login de "juan" desde la misma red (un local con un solo
+    // router), y aun así no se pueden probar más de 5 claves por minuto
+    // contra una misma cuenta. El contador 'default' (por IP, más alto)
+    // sigue frenando a quien recorre muchos usuarios distintos desde una IP.
     ThrottlerModule.forRoot({
-      throttlers: [{ name: 'default', ttl: 60000, limit: 20 }],
+      throttlers: [
+        { name: 'default', ttl: 60000, limit: 20 },
+        {
+          name: 'login',
+          ttl: 60000,
+          limit: 5,
+          skipIf: (context) => context.getHandler().name !== 'login',
+          getTracker: (req) => {
+            const nick =
+              typeof req.body?.nickUsuario === 'string'
+                ? req.body.nickUsuario.trim().toLowerCase()
+                : 'sin-usuario';
+            return `${req.ip}-${nick}`;
+          },
+        },
+      ],
       errorMessage:
         'Demasiados intentos. Esperá un momento antes de volver a intentar.',
     }),

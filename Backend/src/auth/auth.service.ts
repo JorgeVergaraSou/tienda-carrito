@@ -45,6 +45,16 @@ const RESET_PASSWORD_REQUEST_MIN_DURATION_MS = 400;
 
 @Injectable()
 export class AuthService {
+  /** hash de una clave que nadie usa: cuando el nickUsuario no existe se
+   * verifica igual contra este hash, así la rama "no existe" también paga
+   * un argon2 completo y no responde ~70 ms más rápido que "clave
+   * incorrecta". El padToMinDuration del finally sigue de segunda barrera
+   * (cubre el caso de un argon2 más lento de lo previsto). Se calcula una
+   * sola vez, al instanciar el servicio. */
+  private readonly hashFicticio: Promise<string> = argon2.hash(
+    'clave-que-nadie-usa-nunca',
+  );
+
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
@@ -133,6 +143,11 @@ export class AuthService {
       // (ver LOGIN_MIN_DURATION_MS) — puesto en el finally (no en cada
       // return/throw) para que ninguna salida nueva pueda saltearlo por
       // error.
+      // se verifica SIEMPRE contra un hash (el real, o el ficticio si el
+      // usuario no existe) — ver hashFicticio.
+      const hash = user ? user.password : await this.hashFicticio;
+      const isPasswordValid = await argon2.verify(hash, password);
+
       if (!user) {
         selectLogger.warn(
           `Login fallido: nickUsuario no encontrado -> ${nickUsuario}`,
@@ -140,8 +155,6 @@ export class AuthService {
         throw new UnauthorizedException('Usuario o contraseña inválidos');
       }
 
-      // Verificar la contraseña
-      const isPasswordValid = await argon2.verify(user.password, password);
       if (!isPasswordValid) {
         selectLogger.warn(
           `Login fallido: contraseña incorrecta para -> ${nickUsuario}`,
@@ -158,6 +171,10 @@ export class AuthService {
         nickUsuario: user.nickUsuario,
         role: user.role,
         name: user.nombre,
+        // versión de la contraseña con la que se emite este token — si el
+        // usuario la cambia después, AuthGuard rechaza el token (ver
+        // UserEntity.passwordChangedAt)
+        pv: user.passwordChangedAt?.getTime() ?? 0,
       };
 
       // Generar el token
@@ -181,12 +198,20 @@ export class AuthService {
   /** INICIO RECUPERAR CLAVE */
 
   /**
-   * Pide nickUsuario + email juntos (no solo email) para evitar que
-   * cualquiera que reciba un token válido a su propio email pueda
-   * aplicarlo sobre el nick de otra persona. Si el usuario todavía no
-   * tiene email asociado, éste queda guardado en su perfil (debe ser
-   * único). Si ya tiene uno, se ignora el que llega acá y el token
-   * siempre se manda al email ya guardado.
+   * Pide nickUsuario + email juntos y solo manda el enlace si el email
+   * escrito COINCIDE con el que la cuenta ya tenía registrado. Regla de
+   * oro: el enlace nunca va a un email que escribe quien lo pide.
+   *
+   * Antes, si el usuario todavía no tenía email, el que llegaba en el
+   * pedido se le asociaba a la cuenta y el enlace se mandaba ahí — como el
+   * nick no es secreto, cualquiera podía robar una cuenta sin email
+   * escribiendo su nick y un email propio. Ahora eso no pasa: una cuenta
+   * sin email registrado no puede recuperarse por acá (un ADMIN le carga
+   * el email o le resetea la clave desde PATCH /auth/editar-usuario/:id).
+   *
+   * En TODOS los casos en que no se manda nada (usuario inexistente, sin
+   * email, email que no coincide) la respuesta es idéntica a la de un
+   * pedido exitoso: no revela qué usuarios existen ni qué email tienen.
    */
   async requestResetPassword(dto: RequestResetPasswordDto): Promise<void> {
     const { nickUsuario, email } = dto;
@@ -195,44 +220,23 @@ export class AuthService {
     try {
       const user = await this.usersService.findOneByNick(nickUsuario);
 
-      // si el usuario no existe, se responde igual que un pedido exitoso
-      // (sin mandar nada) — no distinguir este caso evita que la respuesta
-      // revele qué nombres de usuario existen en el sistema. El
-      // padToMinDuration del finally empareja además el tiempo de
-      // respuesta de esta rama con el de un pedido real (ver
-      // RESET_PASSWORD_REQUEST_MIN_DURATION_MS) — puesto en el finally (no
-      // en cada return/throw individual) para que también cubra los
-      // errores de negocio que se lanzan más abajo una vez que el usuario
-      // ya existe (email en uso, fallo al asociar email, fallo al generar
-      // el token) y no queden respondiendo casi al instante. No elimina
-      // del todo el oráculo (la rama real manda un mail real por SMTP, de
-      // latencia variable) pero saca la señal más obvia.
-      if (!user) {
+      // sin usuario, sin email registrado, o email distinto: se responde
+      // igual que un pedido exitoso (sin mandar nada). El padToMinDuration
+      // del finally empareja además el tiempo de respuesta con el de un
+      // pedido real (ver RESET_PASSWORD_REQUEST_MIN_DURATION_MS) — puesto
+      // en el finally (no en cada return/throw individual) para que
+      // también cubra los errores de negocio que se lanzan más abajo. No
+      // elimina del todo el oráculo (la rama real manda un mail real por
+      // SMTP, de latencia variable) pero saca la señal más obvia.
+      if (
+        !user ||
+        !user.email ||
+        user.email.toLowerCase() !== email.trim().toLowerCase()
+      ) {
         return;
       }
 
-      let destinationEmail = user.email;
-
-      if (!destinationEmail) {
-        const emailEnUso = await this.usersService.findOneByEmail(email);
-
-        if (emailEnUso) {
-          throw new BadRequestException(
-            'Ese email ya está asociado a otro usuario',
-          );
-        }
-
-        const { success: emailAsociado } = await this.usersService.setEmail(
-          user.idUser,
-          email,
-        );
-
-        if (!emailAsociado) {
-          throw new BadRequestException('Hubo un error al asociar el email');
-        }
-
-        destinationEmail = email;
-      }
+      const destinationEmail = user.email;
 
       const resetPasswordToken = uuidv4();
       const expiresAt = new Date(
@@ -309,7 +313,8 @@ export class AuthService {
         authErrorLogger,
         'AuthService.resetPassword',
         'Error al actualizar la contraseña',
-        { resetPasswordToken },
+        // el token es equivalente a una contraseña temporal: nunca va a
+        // los logs (ni siquiera vencido o inválido)
       );
     }
   }
@@ -408,9 +413,9 @@ export class AuthService {
     }
   }
 
-  async deleteUser(id: number): Promise<void> {
+  async deleteUser(id: number, actorId: number): Promise<void> {
     try {
-      await this.usersService.darDeBajaUsuario(id);
+      await this.usersService.darDeBajaUsuario(id, actorId);
     } catch (error) {
       handleServiceError(
         error,

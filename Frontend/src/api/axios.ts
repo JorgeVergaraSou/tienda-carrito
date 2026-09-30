@@ -23,10 +23,19 @@ api.interceptors.request.use(
     const userStorage = localStorage.getItem(UserKey);
 
     if (userStorage) {
-      const user = JSON.parse(userStorage);
+      // try/catch: si el valor guardado se corrompió (o alguien lo editó a
+      // mano), un JSON.parse sin proteger hace fallar CADA pedido con un
+      // SyntaxError que no dice nada. Se sigue sin token: el pedido sale
+      // sin Authorization y el backend responde 401, que el interceptor
+      // de respuesta ya maneja limpiando la sesión.
+      try {
+        const user = JSON.parse(userStorage);
 
-      if (user.token) {
-        config.headers.Authorization = `Bearer ${user.token}`;
+        if (user?.token) {
+          config.headers.Authorization = `Bearer ${user.token}`;
+        }
+      } catch {
+        localStorage.removeItem(UserKey);
       }
     }
 

@@ -16,6 +16,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { ImagenSubidaInterceptor } from '@/common/upload/imagen-subida.interceptor';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { AuthService } from './auth.service';
@@ -47,7 +48,9 @@ export class AuthController {
   }
 
   @UseGuards(ThrottlerGuard)
-  @Throttle({ default: { limit: 5, ttl: 60000 } }) // máx. 5 intentos por minuto por IP
+  // máx. 5 intentos por minuto por IP+usuario ('login', ver app.module.ts) y
+  // 20 por minuto por IP en total ('default')
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @Post('login')
   async login(@Body() loginDto: LoginDto) {
@@ -100,6 +103,9 @@ export class AuthController {
       fileFilter: avatarFileFilter,
       limits: { fileSize: 5 * 1024 * 1024 },
     }),
+    // verifica la firma real del archivo y borra el archivo si el pedido
+    // falla después de guardarse (ver imagen-subida.interceptor.ts)
+    ImagenSubidaInterceptor,
   )
   async actualizarFoto(
     @UploadedFile() file: Express.Multer.File,
@@ -130,8 +136,11 @@ export class AuthController {
 
   @Delete('dar-de-baja-usuario/:id')
   @Auth(Role.ADMIN)
-  async deleteUser(@Param('id', ParseIntPipe) id: number): Promise<void> {
-    return await this.authService.deleteUser(id);
+  async deleteUser(
+    @Param('id', ParseIntPipe) id: number,
+    @ActiveUser() user: UserActiveInterface,
+  ): Promise<void> {
+    return await this.authService.deleteUser(id, user.idUser);
   }
 
   @Patch('activar-usuario/:id')

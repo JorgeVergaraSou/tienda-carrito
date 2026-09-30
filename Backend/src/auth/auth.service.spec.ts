@@ -124,7 +124,39 @@ describe('AuthService.login', () => {
       nickUsuario: baseUser.nickUsuario,
       role: baseUser.role,
       name: baseUser.nombre,
+      // versión de la contraseña (0 = nunca la cambió): ver AuthGuard
+      pv: 0,
     });
+  });
+
+  it('el claim pv del token es el passwordChangedAt del usuario en milisegundos', async () => {
+    const cambiada = new Date('2026-01-02T03:04:05.678Z');
+    usersService.findByNickWithPassword.mockResolvedValue({
+      ...baseUser,
+      passwordChangedAt: cambiada,
+    } as any);
+    (argon2.verify as jest.Mock).mockResolvedValue(true);
+    jwtService.signAsync.mockResolvedValue('jwt');
+
+    await authService.login({
+      nickUsuario: baseUser.nickUsuario,
+      password: 'x',
+    });
+
+    expect(jwtService.signAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ pv: cambiada.getTime() }),
+    );
+  });
+
+  it('con un nickUsuario inexistente igual se verifica contra un hash (sin oráculo de tiempo)', async () => {
+    (argon2.verify as jest.Mock).mockClear();
+    usersService.findByNickWithPassword.mockResolvedValue(null);
+
+    await expect(
+      authService.login({ nickUsuario: 'no-existe', password: 'x' }),
+    ).rejects.toThrow(UnauthorizedException);
+
+    expect(argon2.verify).toHaveBeenCalledTimes(1);
   });
 
   it('empareja el tiempo de respuesta (padToMinDuration) en las tres ramas, para cerrar el oráculo de tiempo', async () => {
@@ -157,13 +189,7 @@ describe('AuthService.login', () => {
 describe('AuthService.requestResetPassword', () => {
   let authService: AuthService;
   let usersService: jest.Mocked<
-    Pick<
-      UsersService,
-      | 'findOneByNick'
-      | 'findOneByEmail'
-      | 'setEmail'
-      | 'updateTokenResetPassword'
-    >
+    Pick<UsersService, 'findOneByNick' | 'updateTokenResetPassword'>
   >;
   let jwtService: jest.Mocked<Pick<JwtService, 'signAsync'>>;
   let sendMail: jest.Mock;
@@ -181,8 +207,6 @@ describe('AuthService.requestResetPassword', () => {
 
     usersService = {
       findOneByNick: jest.fn(),
-      findOneByEmail: jest.fn(),
-      setEmail: jest.fn(),
       updateTokenResetPassword: jest.fn(),
     };
     jwtService = { signAsync: jest.fn() };
@@ -215,104 +239,76 @@ describe('AuthService.requestResetPassword', () => {
     expect(padToMinDuration).toHaveBeenCalledTimes(1);
   });
 
-  it('si el usuario ya tiene email asociado, ignora el del body y manda el token al que ya está guardado', async () => {
+  it('manda el token al email registrado cuando el email pedido coincide (sin distinguir mayúsculas)', async () => {
+    usersService.findOneByNick.mockResolvedValue({
+      ...baseUser,
+      email: 'Guardado@Example.com',
+    } as any);
+    usersService.updateTokenResetPassword.mockResolvedValue({ success: true });
+
+    await authService.requestResetPassword({
+      nickUsuario: baseUser.nickUsuario,
+      email: ' guardado@example.com ',
+    });
+
+    expect(sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({ to: 'Guardado@Example.com' }),
+    );
+  });
+
+  it('si el email pedido NO coincide con el registrado, no manda nada ni genera token (respuesta idéntica a un pedido exitoso)', async () => {
     usersService.findOneByNick.mockResolvedValue({
       ...baseUser,
       email: 'guardado@example.com',
     } as any);
-    usersService.updateTokenResetPassword.mockResolvedValue({ success: true });
-
-    await authService.requestResetPassword({
-      nickUsuario: baseUser.nickUsuario,
-      email: 'otro-email-cualquiera@example.com',
-    });
-
-    expect(usersService.setEmail).not.toHaveBeenCalled();
-    expect(sendMail).toHaveBeenCalledWith(
-      expect.objectContaining({ to: 'guardado@example.com' }),
-    );
-  });
-
-  it('si el usuario no tiene email, valida que el del body no esté en uso, lo asocia y lo usa como destino', async () => {
-    usersService.findOneByNick.mockResolvedValue({
-      ...baseUser,
-      email: null,
-    } as any);
-    usersService.findOneByEmail.mockResolvedValue(null);
-    usersService.setEmail.mockResolvedValue({ success: true });
-    usersService.updateTokenResetPassword.mockResolvedValue({ success: true });
-
-    await authService.requestResetPassword({
-      nickUsuario: baseUser.nickUsuario,
-      email: 'nuevo@example.com',
-    });
-
-    expect(usersService.findOneByEmail).toHaveBeenCalledWith(
-      'nuevo@example.com',
-    );
-    expect(usersService.setEmail).toHaveBeenCalledWith(
-      baseUser.idUser,
-      'nuevo@example.com',
-    );
-    expect(sendMail).toHaveBeenCalledWith(
-      expect.objectContaining({ to: 'nuevo@example.com' }),
-    );
-  });
-
-  it('rechaza si el email a asociar por primera vez ya está en uso por otro usuario', async () => {
-    usersService.findOneByNick.mockResolvedValue({
-      ...baseUser,
-      email: null,
-    } as any);
-    usersService.findOneByEmail.mockResolvedValue({ idUser: 2 } as any);
 
     await expect(
       authService.requestResetPassword({
         nickUsuario: baseUser.nickUsuario,
-        email: 'en-uso@example.com',
+        email: 'otro-email-cualquiera@example.com',
       }),
-    ).rejects.toMatchObject({
-      message: 'Ese email ya está asociado a otro usuario',
-    });
+    ).resolves.toBeUndefined();
 
-    expect(usersService.setEmail).not.toHaveBeenCalled();
+    expect(usersService.updateTokenResetPassword).not.toHaveBeenCalled();
     expect(sendMail).not.toHaveBeenCalled();
-    // regresión: este throw pasa por handleServiceError antes de tocar la
-    // base o mandar mail — si el padding solo se llamara antes de cada
-    // return/throw "a mano" (como estaba antes), esta rama respondería
-    // casi al instante pese a que el usuario sí existe, reabriendo el
-    // oráculo de tiempo. El finally de requestResetPassword lo cubre.
     expect(padToMinDuration).toHaveBeenCalledTimes(1);
   });
 
-  it('empareja el tiempo también en las ramas de error una vez que el usuario ya existe (setEmail falla, token falla)', async () => {
+  it('regresión (robo de cuenta): un usuario SIN email no recibe el token en el email que escribe quien lo pide', async () => {
     usersService.findOneByNick.mockResolvedValue({
       ...baseUser,
       email: null,
     } as any);
-    usersService.findOneByEmail.mockResolvedValue(null);
-    usersService.setEmail.mockResolvedValue({ success: false });
 
     await expect(
       authService.requestResetPassword({
         nickUsuario: baseUser.nickUsuario,
-        email: 'nuevo@example.com',
+        email: 'atacante@example.com',
       }),
-    ).rejects.toMatchObject({ message: 'Hubo un error al asociar el email' });
-    expect(padToMinDuration).toHaveBeenCalledTimes(1);
+    ).resolves.toBeUndefined();
 
-    (padToMinDuration as jest.Mock).mockClear();
-    usersService.setEmail.mockResolvedValue({ success: true });
+    // ni se asocia el email a la cuenta, ni se genera token, ni se manda mail
+    expect(usersService.updateTokenResetPassword).not.toHaveBeenCalled();
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  it('empareja el tiempo también cuando falla la generación del token (usuario ya existente)', async () => {
+    usersService.findOneByNick.mockResolvedValue({
+      ...baseUser,
+      email: 'guardado@example.com',
+    } as any);
     usersService.updateTokenResetPassword.mockResolvedValue({ success: false });
 
     await expect(
       authService.requestResetPassword({
         nickUsuario: baseUser.nickUsuario,
-        email: 'nuevo@example.com',
+        email: 'guardado@example.com',
       }),
     ).rejects.toMatchObject({
       message: 'No se pudo generar el token de recuperación.',
     });
+    // el throw pasa por handleServiceError — si el padding no estuviera en
+    // el finally, esta rama respondería casi al instante (oráculo de tiempo)
     expect(padToMinDuration).toHaveBeenCalledTimes(1);
     expect(sendMail).not.toHaveBeenCalled();
   });

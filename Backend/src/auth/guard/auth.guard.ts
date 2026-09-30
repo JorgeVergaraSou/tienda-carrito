@@ -50,9 +50,28 @@ export class AuthGuard implements CanActivate {
         throw new UnauthorizedException();
       }
 
-      /** si el token es valido le agfregamos el usuario */
-      request.user =
-        payload; /** al request se le puede agregar informacion, va  atener una propiedad nueva
+      // el token solo prueba QUIÉN es (idUser) — no qué puede hacer ni si
+      // su clave sigue siendo la misma:
+      // - contraseña: el claim `pv` (ver AuthService.login) es el
+      //   passwordChangedAt del usuario al emitirse el token. Si cambió
+      //   (autoservicio, reseteo por mail o por un ADMIN), el token es
+      //   anterior al cambio y deja de valer. Los tokens viejos sin `pv`
+      //   cuentan como 0, igual que un usuario que nunca cambió la clave.
+      const versionActual = user.passwordChangedAt?.getTime() ?? 0;
+      if ((payload.pv ?? 0) !== versionActual) {
+        throw new UnauthorizedException();
+      }
+
+      /** si el token es valido le agfregamos el usuario. El rol (y el
+       * nick/nombre) salen de la BASE, no del token: si a un usuario le
+       * quitan el rol ADMIN (o se lo dan), rige en el siguiente pedido y
+       * no recién cuando vence el JWT (hasta 3 horas después). */
+      request.user = {
+        ...payload,
+        role: user.role,
+        nickUsuario: user.nickUsuario,
+        name: user.nombre,
+      }; /** al request se le puede agregar informacion, va  atener una propiedad nueva
 llamada user */
     } catch (error) {
       // usersService.findOneById puede fallar por un motivo ajeno al token

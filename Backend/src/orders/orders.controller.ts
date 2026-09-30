@@ -7,7 +7,9 @@ import {
   ParseIntPipe,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { Auth } from '@/auth/decorators/auth.decorator';
 import { Role } from '@/common/enums/role.enum';
 import { OrdersService } from './orders.service';
@@ -21,6 +23,12 @@ export class OrdersController {
   /** checkout como invitado — público, sin @Auth (ver Backend/CLAUDE.md,
    * sección "Carrito de compra + Mercado Pago"): cualquier visitante
    * puede crear un pedido sin loguearse. */
+  // cada pedido crea una Preferencia en la API de Mercado Pago y escribe en
+  // la base, y el endpoint es público: sin límite, un script puede
+  // inundar la tabla de pedidos y gastar cuota de la cuenta de Mercado
+  // Pago. 10 pedidos cada 10 minutos por IP sobra para un cliente real.
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 10, ttl: 600000 } })
   @Post()
   async create(@Body() dto: CreateOrderDto) {
     return this.ordersService.crearOrden(dto);
@@ -57,6 +65,12 @@ export class OrdersController {
    * ya sea el status default de un POST que no tira) — ver el comentario
    * largo en `OrdersService.procesarWebhookMercadoPago` sobre por qué
    * nunca hay que devolverle un error a Mercado Pago acá. */
+  // límite por IP: cada notificación dispara una consulta a la API de
+  // Mercado Pago con NUESTRO Access Token, y el endpoint es público — sin
+  // tope, cualquiera puede usarlo para quemar la cuota de la cuenta. 100
+  // por minuto es holgado para las notificaciones de una tienda chica.
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 100, ttl: 60000 } })
   @Post('webhook')
   @HttpCode(200)
   async webhook(
@@ -74,6 +88,8 @@ export class OrdersController {
    * endpoint a mano, no había ningún caso de test que lo cubriera. Mismo
    * body vacío siempre (un GET no trae body), toda la información viaja
    * por query. */
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 100, ttl: 60000 } })
   @Get('webhook')
   @HttpCode(200)
   async webhookPorGet(@Query() query: Record<string, string>): Promise<void> {

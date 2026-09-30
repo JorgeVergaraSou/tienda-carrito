@@ -1596,6 +1596,21 @@ la misma sesión de pruebas donde venía de fallar la contraseña varias veces.
   sesión como siempre — el fix no afecta ese caso. `npx tsc -b --noEmit` + `npx vite build` +
   `npm run lint` limpios.
 
+**CSP y endurecimiento (auditoría de seguridad 2026-09-30, ver `guia-seguridad-proyectos.md`)**:
+0 usos de `dangerouslySetInnerHTML`/`innerHTML`/`eval`, y todo `title`/`text` de SweetAlert2 recibe
+texto fijo o `text:` (no HTML) — mantenerlo así: SweetAlert2 SÍ interpreta `title`/`html`/`footer` como
+HTML, si algún día se interpola un dato ahí hay que escaparlo.
+- `vite.config.ts` inyecta una Content-Security-Policy (`<meta>`) en el `index.html` del BUILD web (no en
+  `vite dev`, ni en `--mode mobile`/Capacitor). `script-src 'self'` (sin inline ni eval); `connect-src`/
+  `img-src` toman el origen de `VITE_API_BASE_URL`. Probada en un build real con Playwright: 0
+  violaciones en catálogo y panel ADMIN, y bloquea script en línea, `onerror`, script ajeno y `fetch`
+  con el token a otro dominio. **En producción** hay que agregar `frame-ancestors 'none'` y
+  `X-Frame-Options` como cabeceras HTTP del servidor que sirva `dist/` (un `<meta>` no las soporta).
+- `api/axios.ts`: `JSON.parse` de la sesión con `try/catch`. `CheckoutPage`: se valida que `initPoint`
+  sea https de mercadopago.com(.ar) ANTES de vaciar el carrito y redirigir. `window.open` a WhatsApp con
+  `noopener,noreferrer`.
+- Pendiente (baja): el token vive en `localStorage` (lo lee cualquier XSS futuro; mitigado por la CSP).
+
 ## Estado de las herramientas
 
 - `npm run dev` — Vite dev server.

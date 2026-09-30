@@ -11,6 +11,35 @@ function formatPrice(precio: number): string {
   return `$${precio.toFixed(2)}`;
 }
 
+/** Valida que la URL a la que se va a redirigir sea de verdad una página de
+ * pago de Mercado Pago (https + dominio de Mercado Pago) y la devuelve. La
+ * URL viene de la respuesta del backend y se asigna a `window.location.href`:
+ * un valor inesperado (`javascript:...`, otro dominio) ejecutaría código o
+ * mandaría al comprador a un sitio ajeno con el pedido recién armado. No
+ * es una defensa contra un backend comprometido — es no redirigir a ciegas
+ * ante un dato raro (respuesta manipulada por un proxy, bug del backend). */
+function urlDeMercadoPagoValida(initPoint: string): string {
+  let url: URL;
+
+  try {
+    url = new URL(initPoint);
+  } catch {
+    throw new Error('No se pudo iniciar el pago, intentá de nuevo en unos minutos');
+  }
+
+  const esMercadoPago =
+    url.hostname === 'mercadopago.com' ||
+    url.hostname.endsWith('.mercadopago.com') ||
+    url.hostname === 'mercadopago.com.ar' ||
+    url.hostname.endsWith('.mercadopago.com.ar');
+
+  if (url.protocol !== 'https:' || !esMercadoPago) {
+    throw new Error('No se pudo iniciar el pago, intentá de nuevo en unos minutos');
+  }
+
+  return url.toString();
+}
+
 interface CheckoutFormState {
   nombreContacto: string;
   email: string;
@@ -72,6 +101,10 @@ function CheckoutPage() {
         items: items.map((item) => ({ idProducto: item.idProducto, cantidad: item.cantidad })),
       });
 
+      // se valida ANTES de vaciar el carrito: si la URL es rara, el error
+      // sale por el catch de abajo y el carrito queda intacto.
+      const destino = urlDeMercadoPagoValida(orden.initPoint);
+
       // antes de vaciar el carrito (que dispara el re-render que de otro
       // modo mostraría el estado de "carrito vacío" más abajo, ver el
       // comentario del componente).
@@ -79,7 +112,7 @@ function CheckoutPage() {
       dispatch(clearCart());
       // navegación dura a propósito (no react-router): initPoint es una
       // URL de Mercado Pago, no una ruta de este sitio.
-      window.location.href = orden.initPoint;
+      window.location.href = destino;
     } catch (error) {
       setFormError(getErrorMessage(error));
       setEnviando(false);

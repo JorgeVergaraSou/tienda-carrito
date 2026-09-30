@@ -46,7 +46,7 @@ describe('AuthGuard', () => {
     );
   });
 
-  it('deja pasar y adjunta el payload a request.user si el token y el usuario son válidos', async () => {
+  it('deja pasar y adjunta a request.user el payload del token si el token y el usuario son válidos', async () => {
     const payload = {
       idUser: 1,
       nickUsuario: 'user1',
@@ -54,11 +54,84 @@ describe('AuthGuard', () => {
       name: 'User',
     };
     jwtService.verifyAsync.mockResolvedValue(payload);
-    usersService.findOneById.mockResolvedValue({ idUser: 1 } as any);
+    usersService.findOneById.mockResolvedValue({
+      idUser: 1,
+      nickUsuario: 'user1',
+      nombre: 'User',
+      role: 'USER',
+      passwordChangedAt: null,
+    } as any);
     const { context, request } = buildContext('Bearer un-jwt-valido');
 
     await expect(guard.canActivate(context)).resolves.toBe(true);
     expect(request.user).toEqual(payload);
+  });
+
+  it('el rol de request.user sale de la BASE, no del token (un ADMIN degradado pierde el acceso al instante)', async () => {
+    jwtService.verifyAsync.mockResolvedValue({
+      idUser: 1,
+      nickUsuario: 'viejo-nick',
+      role: 'ADMIN',
+      name: 'Viejo',
+    });
+    usersService.findOneById.mockResolvedValue({
+      idUser: 1,
+      nickUsuario: 'nick-actual',
+      nombre: 'Actual',
+      role: 'USER',
+      passwordChangedAt: null,
+    } as any);
+    const { context, request } = buildContext('Bearer un-jwt-valido');
+
+    await expect(guard.canActivate(context)).resolves.toBe(true);
+    expect(request.user).toMatchObject({
+      idUser: 1,
+      role: 'USER',
+      nickUsuario: 'nick-actual',
+      name: 'Actual',
+    });
+  });
+
+  it('rechaza un token emitido antes del último cambio de contraseña', async () => {
+    jwtService.verifyAsync.mockResolvedValue({ idUser: 1, pv: 0 });
+    usersService.findOneById.mockResolvedValue({
+      idUser: 1,
+      role: 'USER',
+      passwordChangedAt: new Date('2026-05-01T10:00:00.123Z'),
+    } as any);
+    const { context } = buildContext('Bearer un-jwt-viejo');
+
+    await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('acepta un token emitido con la contraseña actual (mismo pv, con milisegundos)', async () => {
+    const cambiada = new Date('2026-05-01T10:00:00.123Z');
+    jwtService.verifyAsync.mockResolvedValue({
+      idUser: 1,
+      pv: cambiada.getTime(),
+    });
+    usersService.findOneById.mockResolvedValue({
+      idUser: 1,
+      role: 'USER',
+      passwordChangedAt: cambiada,
+    } as any);
+    const { context } = buildContext('Bearer un-jwt-vigente');
+
+    await expect(guard.canActivate(context)).resolves.toBe(true);
+  });
+
+  it('un token viejo sin claim pv sigue valiendo mientras el usuario nunca cambió la clave', async () => {
+    jwtService.verifyAsync.mockResolvedValue({ idUser: 1 });
+    usersService.findOneById.mockResolvedValue({
+      idUser: 1,
+      role: 'USER',
+      passwordChangedAt: null,
+    } as any);
+    const { context } = buildContext('Bearer un-jwt-anterior-al-cambio');
+
+    await expect(guard.canActivate(context)).resolves.toBe(true);
   });
 
   it('rechaza si el JWT es inválido/expirado (error plano de jsonwebtoken)', async () => {

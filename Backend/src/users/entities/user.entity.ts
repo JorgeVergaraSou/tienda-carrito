@@ -32,10 +32,15 @@ export class UserEntity {
   @Column({ nullable: false, select: false, name: 'password' })
   password!: string;
 
+  /** select:false, igual que `password`: es equivalente a una contraseña
+   * temporal, y sin esto cualquier relación que cargue al usuario completo
+   * (ej. `product.creadoPor`) la arrastra a la respuesta de OTRO usuario.
+   * Donde de verdad hace falta (validar el reseteo) se pide explícita. */
   @Column({
     type: 'uuid',
     unique: true,
     nullable: true,
+    select: false,
     name: 'reset_password_token',
   })
   resetPasswordToken!: string | null;
@@ -43,9 +48,24 @@ export class UserEntity {
   @Column({
     type: 'datetime',
     nullable: true,
+    select: false,
     name: 'reset_password_token_expires_at',
   })
   resetPasswordTokenExpiresAt!: Date | null;
+
+  /** cuándo se cambió la contraseña por última vez (con milisegundos: un
+   * `datetime` sin decimales redondea y el chequeo del guard quedaría
+   * impreciso). El JWT lleva este valor en el claim `pv` al emitirse
+   * (ver AuthService.login) y AuthGuard exige que siga siendo el mismo:
+   * cambiar la clave (autoservicio, reseteo por mail o por un ADMIN)
+   * invalida todos los tokens emitidos antes. */
+  @Column({
+    type: 'datetime',
+    precision: 3,
+    nullable: true,
+    name: 'password_changed_at',
+  })
+  passwordChangedAt!: Date | null;
 
   @Column({ type: 'varchar', nullable: true, name: 'image_file' })
   imageFile!: string | null;

@@ -166,6 +166,13 @@ export class MercadoPagoService {
    * acá un pago no encontrado es un resultado válido (`null`), no un
    * error que haya que propagar. */
   async consultarPago(paymentId: string): Promise<PaymentResponse | null> {
+    // defensa en profundidad (OrdersService ya lo valida): el id se usa
+    // para armar la URL de la API con nuestro Access Token, así que tiene
+    // que ser sí o sí un entero.
+    if (!/^\d{1,20}$/.test(paymentId)) {
+      return null;
+    }
+
     const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
 
     if (!accessToken) {

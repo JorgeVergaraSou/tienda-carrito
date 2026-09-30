@@ -1,9 +1,11 @@
-import { Transform } from 'class-transformer';
+import { RecortarTexto } from '@/common/decorators/recortar-texto.decorator';
+import { SinHtml } from '@/common/decorators/sin-html.decorator';
 import {
   IsEmail,
   IsEnum,
   IsOptional,
   IsString,
+  MaxLength,
   MinLength,
 } from 'class-validator';
 import { Role } from '@/common/enums/role.enum';
@@ -23,15 +25,19 @@ export class AdminUpdateUserDto {
   nickUsuario?: string;
 
   @IsOptional()
-  @Transform(({ value }) => value.trim())
+  @RecortarTexto()
   @IsString({ message: 'El nombre debe ser una cadena de texto.' })
   @MinLength(3, { message: 'El nombre debe tener al menos 3 caracteres.' })
+  @MaxLength(60, { message: 'El nombre no puede superar los 60 caracteres.' })
+  @SinHtml()
   nombre?: string;
 
   @IsOptional()
-  @Transform(({ value }) => value.trim())
+  @RecortarTexto()
   @IsString({ message: 'El apellido debe ser una cadena de texto.' })
   @MinLength(3, { message: 'El apellido debe tener al menos 3 caracteres.' })
+  @MaxLength(60, { message: 'El apellido no puede superar los 60 caracteres.' })
+  @SinHtml()
   apellido?: string;
 
   @IsOptional()
@@ -41,6 +47,7 @@ export class AdminUpdateUserDto {
       message: 'El email debe ser una dirección de correo electrónico válida.',
     },
   )
+  @MaxLength(255, { message: 'El email no puede superar los 255 caracteres.' })
   email?: string;
 
   @IsOptional()

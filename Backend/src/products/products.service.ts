@@ -16,6 +16,7 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { FindProductsQueryDto } from './dto/find-products-query.dto';
 import { BulkPriceAdjustmentDto } from './dto/bulk-price-adjustment.dto';
+import { PRECIO_MAX } from './dto/create-product.dto';
 import {
   PaginatedProductsResponseDto,
   ProductResponseDto,
@@ -417,10 +418,14 @@ export class ProductsService implements OnApplicationBootstrap {
         await this.categoriesService.findActivaByIdOrThrow(dto.idCategoria);
       }
 
+      // GREATEST(...,0) es el piso (nunca negativo) y LEAST(...,PRECIO_MAX)
+      // el techo: un aumento sobre un precio ya alto no puede desbordar
+      // DECIMAL(10,2) (MySQL en modo estricto tiraría un error 500 y no
+      // se aplicaría NINGÚN cambio).
       const formula =
         dto.tipo === TipoAjustePrecio.PORCENTAJE
-          ? 'GREATEST(ROUND(precio * (1 + :valor / 100), 2), 0)'
-          : 'GREATEST(ROUND(precio + :valor, 2), 0)';
+          ? `LEAST(GREATEST(ROUND(precio * (1 + :valor / 100), 2), 0), ${PRECIO_MAX})`
+          : `LEAST(GREATEST(ROUND(precio + :valor, 2), 0), ${PRECIO_MAX})`;
 
       const queryBuilder = this.productRepository
         .createQueryBuilder()

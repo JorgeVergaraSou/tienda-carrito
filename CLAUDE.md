@@ -58,3 +58,9 @@ identificar.
   de cada cambio, antes de darlo por terminado.
 - `uploads/` en el backend es una carpeta compartida entre datos de prueba y datos reales — nunca
   borrar ahí por patrón/glob, siempre por nombre de archivo específico (ver Backend/CLAUDE.md).
+
+## Seguridad
+
+`guia-seguridad-proyectos.md` es la guía de auditoría; su ejecución completa (2026-09-30) está
+resumida en `Backend/CLAUDE.md` ("Auditoría de seguridad completa") y `Frontend/CLAUDE.md`
+("CSP y endurecimiento"). Regresión: `cd Backend && npm run test:security` (necesita `Backend/.env.e2e`).

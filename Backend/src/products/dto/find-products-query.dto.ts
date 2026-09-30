@@ -20,6 +20,7 @@ export class FindProductsQueryDto {
   @Type(() => Number)
   @IsInt({ message: 'La página debe ser un número entero' })
   @Min(1, { message: 'La página mínima es 1' })
+  @Max(100000, { message: 'La página máxima es 100000' })
   page?: number = 1;
 
   @IsOptional()

@@ -64,7 +64,11 @@ function ContactPage() {
       const mensajeWhatsapp = encodeURIComponent(
         `Hola, mi nombre es ${form.nombre.trim()}. ${form.mensaje.trim()}`,
       );
-      window.open(`https://wa.me/${numero}?text=${mensajeWhatsapp}`, '_blank');
+      window.open(
+        `https://wa.me/${numero}?text=${mensajeWhatsapp}`,
+        '_blank',
+        'noopener,noreferrer',
+      );
     }
 
     setEnviando(true);

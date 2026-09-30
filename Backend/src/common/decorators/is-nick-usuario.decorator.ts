@@ -1,6 +1,6 @@
 import { applyDecorators } from '@nestjs/common';
 import { Transform } from 'class-transformer';
-import { IsString, Matches, MinLength } from 'class-validator';
+import { IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 /**
  * Validación única para el identificador de login (nickUsuario): mínimo 3
@@ -17,6 +17,10 @@ export function IsNickUsuario() {
     IsString({ message: 'El nombre de usuario debe ser una cadena de texto.' }),
     MinLength(3, {
       message: 'El nombre de usuario debe tener al menos 3 caracteres.',
+    }),
+    // coincide con UserEntity.nickUsuario (varchar(60))
+    MaxLength(60, {
+      message: 'El nombre de usuario no puede superar los 60 caracteres.',
     }),
     Matches(/^[a-zA-Z0-9._-]+$/, {
       message:

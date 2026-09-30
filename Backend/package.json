@@ -17,7 +17,8 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:security": "jest --config ./test/jest-security.json"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.5",
@@ -40,7 +41,7 @@
     "multer": "^2.3.0",
     "mysql2": "^3.15.3",
     "nest-winston": "^1.10.2",
-    "nodemailer": "^9.1.1",
+    "nodemailer": "^10.0.13",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "typeorm": "^0.3.27",

@@ -537,6 +537,48 @@ antes de que llegue a la base.
   (`search=adidas` sigue devolviendo exactamente ese producto). `npm run build` + `npx jest`
   (37/37) limpios.
 
+**Auditoría de seguridad completa según `guia-seguridad-proyectos.md` (2026-09-30)** — sigue a la
+auditoría anterior (arriba, "sin vulnerabilidades reales"): esta vez se escribieron los ataques
+como tests automáticos (`test/security/`, 262 tests, `npm run test:security`), se corrieron ANTES de
+corregir (95 fallos) y después (0). Cómo correrlos: hace falta `Backend/.env.e2e` (ignorado por Git,
+credenciales de la base `tienda-carrito_e2e`, usuario `tc_e2e` que solo ve esa base). El arnés aborta
+si `DB_NAME` no termina en `_e2e`, simula mails y Mercado Pago, y trabaja en un directorio temporal
+(nunca toca `uploads/` ni `logs/` reales). `src/app.setup.ts` (`configureApp`) es la configuración
+de servidor compartida entre `main.ts` y los tests. Fallas reales corregidas:
+- **Robo de cuenta por "olvidé mi clave"**: a un usuario sin email se le asociaba el que escribía
+  quien lo pedía y se le mandaba el enlace. Ahora el enlace solo va al email YA registrado y solo si
+  el escrito coincide; una cuenta sin email se recupera desde `PATCH /auth/editar-usuario/:id`
+  (ADMIN). El token de reseteo ya no se loguea y las columnas del token son `select:false`.
+- **Sesiones**: `AuthGuard` toma rol/nick/nombre de la base en cada pedido (antes del token: un
+  ADMIN degradado seguía siéndolo hasta 3 h). Cambiar la clave (autoservicio, reseteo, ADMIN) invalida
+  los tokens anteriores: `users.password_changed_at` (`datetime(3)`) + claim `pv` del JWT que el
+  guard exige idéntico (los tokens viejos sin `pv` valen mientras el usuario no cambie la clave).
+  Login por IP+usuario (5/min) además del tope por IP (20/min); hash ficticio contra el oráculo de
+  tiempo; un ADMIN no puede darse de baja a sí mismo.
+- **Validación**: `RecortarTexto` (el `value.trim()` viejo daba 500 con un número — incluso en
+  `POST /ordenes`, público), `SinHtml`/`SinSaltosDeLinea`, `@MaxLength` = largo de cada columna,
+  topes de precio/stock/cantidad/`page`/items por pedido (50), `BulkPriceAdjustmentDto` (el
+  `@ValidateIf` saltaba TODA la validación de `valor` con tipo FIJO).
+- **Errores**: el filtro global respeta los 4xx de Express (cuerpo grande 413, JSON roto 400, JSON
+  con anidado enorme 400); `handleServiceError` ya no devuelve el texto de errores SQL (500
+  genérico; datos que no entran en la columna → 400).
+- **Pedidos y webhook**: renglones repetidos se suman antes de validar stock; total validado contra
+  DECIMAL(10,2); el mensaje de "sin stock" no revela un stock oculto; el id de pago del webhook debe
+  ser numérico (antes se armaba la URL de la API de Mercado Pago con el valor crudo y NUESTRO token);
+  el pedido se bloquea (`FOR UPDATE`) al confirmar y el descuento de stock es un `UPDATE` atómico
+  (antes: doble descuento/lost update en paralelo); un pago rechazado y luego reintentado y aprobado
+  termina `PAID`; `POST /ordenes` (10/10 min por IP) y el webhook (100/min por IP) tienen límite.
+- **Archivos**: `ImagenSubidaInterceptor` verifica la firma de bytes (un HTML con `Content-Type:
+  image/png` se aceptaba) y borra el archivo si el pedido falla después de guardarse (huérfanos).
+- **Servidor**: sin `CORS_ORIGIN` ya no cae a `*` sino a `FRONTEND_URL`; `TRUST_PROXY` (cantidad de
+  proxies) para que los límites por IP funcionen detrás de nginx.
+- **Dependencias**: `npm audit --omit=dev` en 0 (multer y nodemailer 9→10.0.13, probado con tests).
+- **Pendientes que NO se aplicaron** (decisión del usuario): la app sigue conectándose como `root`
+  de MySQL con clave de 8 caracteres (el clasificador de permisos bloqueó crear otro usuario y
+  reescribir el `.env`). Con `synchronize: true` la app necesita DDL, así que el usuario correcto es
+  uno con `ALL PRIVILEGES` solo sobre `tienda-carrito.*`; y cambiar la clave de `root` (verificar antes
+  qué otros proyectos de esta PC la usan). Sin sistema de migraciones no se puede quitar el DDL de la app.
+
 **Identidad de login**: `nickUsuario`, no `email`, es el identificador de login — el email es
 opcional y solo queda asociado a una cuenta la primera vez que se pide recuperar la contraseña
 para esa cuenta (ver `AuthService.requestResetPassword`); una vez seteado, el flujo de reset ya no

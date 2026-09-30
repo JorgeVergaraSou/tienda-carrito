@@ -24,6 +24,7 @@ import {
   PaginatedOrdersResponseDto,
 } from './dto/responses/order-admin-response.dto';
 import { OrderStatus } from '@/common/enums/order-status.enum';
+import { PRECIO_MAX } from '@/products/dto/create-product.dto';
 import { ProductEntity } from '@/products/entities/product.entity';
 import { ProductsService } from '@/products/products.service';
 import { MercadoPagoService } from '@/mercadopago/mercadopago.service';
@@ -61,14 +62,29 @@ function extraerPaymentId(
 
   const data = body?.data as Record<string, unknown> | undefined;
   if (esNotificacionDePago && data?.id) {
-    return String(data.id);
+    return idDePagoValido(data.id);
   }
 
   if (query?.topic === 'payment' && query?.id) {
-    return String(query.id);
+    return idDePagoValido(query.id);
   }
 
   return null;
+}
+
+/** El id de pago de Mercado Pago es un número entero. Se exige eso antes de
+ * usarlo: este endpoint es público, y `paymentClient.get({ id })` arma con
+ * ese valor la URL de la API de Mercado Pago (`/v1/payments/<id>`) usando
+ * NUESTRO Access Token — un id como `1/../../customers/search` haría que
+ * el servidor consulte otro recurso de la cuenta a pedido de cualquiera.
+ * Un objeto, un texto con letras o un número enorme devuelven null. */
+function idDePagoValido(valor: unknown): string | null {
+  if (typeof valor !== 'string' && typeof valor !== 'number') {
+    return null;
+  }
+
+  const texto = String(valor);
+  return /^\d{1,20}$/.test(texto) ? texto : null;
 }
 
 @Injectable()
@@ -109,31 +125,59 @@ export class OrdersService {
    * sin ninguna forma de pagarlo. */
   async crearOrden(dto: CreateOrderDto): Promise<OrderResponseDto> {
     try {
-      const items = await Promise.all(
-        dto.items.map(async (item) => {
-          const producto = await this.productsService.findActivoByIdOrThrow(
-            item.idProducto,
-          );
+      // el mismo producto puede venir en varios renglones: se suman ANTES de
+      // validar el stock. Sin esto, dos renglones de 5 unidades de un
+      // producto con stock 5 pasaban los dos (cada uno se comparaba por
+      // separado contra el stock) y se armaba un pedido por 10.
+      const cantidadPorProducto = new Map<number, number>();
+      for (const item of dto.items) {
+        cantidadPorProducto.set(
+          item.idProducto,
+          (cantidadPorProducto.get(item.idProducto) ?? 0) + item.cantidad,
+        );
+      }
 
-          if (item.cantidad > producto.stock) {
+      const items = await Promise.all(
+        [...cantidadPorProducto].map(async ([idProducto, cantidad]) => {
+          const producto =
+            await this.productsService.findActivoByIdOrThrow(idProducto);
+
+          if (cantidad > producto.stock) {
+            // si el dueño eligió ocultar el stock (mostrarStock=false), el
+            // número real tampoco se filtra por este mensaje: un cliente
+            // podría deducirlo probando cantidades.
+            const disponible = producto.mostrarStock
+              ? ` (disponible: ${producto.stock})`
+              : '';
             throw new BadRequestException(
-              `No hay stock suficiente de "${producto.nombre}" (disponible: ${producto.stock})`,
+              `No hay stock suficiente de "${producto.nombre}"${disponible}`,
             );
           }
 
           return {
             producto,
             nombreProducto: producto.nombre,
-            cantidad: item.cantidad,
+            cantidad,
             precioUnitario: producto.precio,
           };
         }),
       );
 
-      const total = items.reduce(
-        (acumulado, item) => acumulado + item.precioUnitario * item.cantidad,
+      // suma en centavos enteros (evita 0.1 + 0.2 = 0.30000000000000004) y
+      // se valida contra lo que entra en la columna DECIMAL(10,2): un total
+      // mayor llegaba a MySQL y salía como un 500 con el error SQL.
+      const totalCentavos = items.reduce(
+        (acumulado, item) =>
+          acumulado + Math.round(item.precioUnitario * 100) * item.cantidad,
         0,
       );
+      const total = totalCentavos / 100;
+
+      if (total > PRECIO_MAX) {
+        throw new BadRequestException(
+          'El total del pedido supera el máximo permitido, reducí las cantidades',
+        );
+      }
 
       return await this.dataSource.transaction(async (manager) => {
         const created = await manager.save(OrderEntity, {
@@ -240,15 +284,33 @@ export class OrdersService {
       }
 
       await this.dataSource.transaction(async (manager) => {
+        // Se bloquea la fila del pedido (SELECT ... FOR UPDATE) antes de
+        // decidir nada: si la misma notificación llega dos veces EN
+        // PARALELO, la segunda espera acá a que la primera termine y ya ve
+        // el pedido en PAID. Sin el bloqueo las dos leían PENDING y las dos
+        // descontaban stock.
         const orden = await manager.findOne(OrderEntity, {
           where: { idOrden },
-          relations: ['items', 'items.producto'],
+          lock: { mode: 'pessimistic_write' },
         });
 
-        // idempotencia: si el pedido no existe, o ya salió de PENDING
-        // (por esta misma notificación reenviada, o por otra posterior),
-        // no hay nada para hacer.
-        if (!orden || orden.estado !== OrderStatus.PENDING) {
+        if (!orden) {
+          return;
+        }
+
+        // PAID es terminal. FAILED también, salvo para un pago aprobado
+        // posterior: Checkout Pro deja reintentar el pago sobre la misma
+        // Preferencia, así que "rechazado" no cierra el pedido — si el
+        // comprador reintenta y el segundo intento se aprueba, tiene que
+        // terminar PAID (antes quedaba FAILED con el dinero cobrado y el
+        // stock sin descontar). Un rechazo solo aplica a un pedido PENDING.
+        const puedeCambiar =
+          nuevoEstado === OrderStatus.PAID
+            ? orden.estado === OrderStatus.PENDING ||
+              orden.estado === OrderStatus.FAILED
+            : orden.estado === OrderStatus.PENDING;
+
+        if (!puedeCambiar) {
           return;
         }
 
@@ -289,7 +351,19 @@ export class OrdersService {
     manager: EntityManager,
     orden: OrderEntity,
   ): Promise<void> {
-    for (const item of orden.items) {
+    const items = await manager.find(OrderItemEntity, {
+      where: { orden: { idOrden: orden.idOrden } },
+      relations: ['producto'],
+    });
+
+    // siempre en el mismo orden (por id de producto): dos pedidos que
+    // comparten varios productos y se confirman a la vez bloquean las filas
+    // de products en el mismo orden y no se traban entre sí (deadlock).
+    items.sort(
+      (a, b) => (a.producto?.idProducto ?? 0) - (b.producto?.idProducto ?? 0),
+    );
+
+    for (const item of items) {
       // producto borrado físicamente (no pasa en la práctica — los
       // productos se dan de baja con soft-delete, ver
       // Backend/CLAUDE.md — pero OrderItemEntity.producto es nullable por
@@ -300,6 +374,7 @@ export class OrdersService {
 
       const productoActual = await manager.findOne(ProductEntity, {
         where: { idProducto: item.producto.idProducto },
+        withDeleted: true,
       });
 
       if (!productoActual) {
@@ -312,10 +387,20 @@ export class OrdersService {
         );
       }
 
-      const nuevoStock = Math.max(0, productoActual.stock - item.cantidad);
-      await manager.update(ProductEntity, productoActual.idProducto, {
-        stock: nuevoStock,
-      });
+      // UPDATE atómico (`stock = GREATEST(stock - n, 0)`) en vez de leer el
+      // stock, restar en JS y guardar el resultado: con dos pagos
+      // distintos del mismo producto confirmándose a la vez, los dos
+      // leían el mismo stock y el segundo pisaba el descuento del primero
+      // (lost update).
+      await manager
+        .createQueryBuilder()
+        .update(ProductEntity)
+        .set({ stock: () => 'GREATEST(stock - :cantidad, 0)' })
+        .where('id_producto = :idProducto', {
+          idProducto: productoActual.idProducto,
+        })
+        .setParameter('cantidad', item.cantidad)
+        .execute();
 
       updateLogger.info(
         `Stock descontado por pago confirmado (producto ID ${productoActual.idProducto}, pedido ID ${orden.idOrden}): -${item.cantidad}`,

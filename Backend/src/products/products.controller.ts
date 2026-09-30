@@ -20,6 +20,7 @@ import {
   productImageFileFilter,
   productImageStorage,
 } from '@/common/upload/product-image-upload.config';
+import { ImagenSubidaInterceptor } from '@/common/upload/imagen-subida.interceptor';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -123,6 +124,9 @@ export class ProductsController {
       fileFilter: productImageFileFilter,
       limits: { fileSize: 5 * 1024 * 1024 },
     }),
+    // verifica la firma real del archivo y borra el archivo si el pedido
+    // falla después de guardarse (ver imagen-subida.interceptor.ts)
+    ImagenSubidaInterceptor,
   )
   async actualizarImagen(
     @Param('id', ParseIntPipe) id: number,
@@ -144,6 +148,9 @@ export class ProductsController {
       fileFilter: productImageFileFilter,
       limits: { fileSize: 5 * 1024 * 1024 },
     }),
+    // verifica la firma real del archivo y borra el archivo si el pedido
+    // falla después de guardarse (ver imagen-subida.interceptor.ts)
+    ImagenSubidaInterceptor,
   )
   async agregarFoto(
     @Param('id', ParseIntPipe) id: number,
